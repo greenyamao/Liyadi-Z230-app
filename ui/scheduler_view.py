@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
 from qfluentwidgets import (
     CardWidget, SwitchButton, PushButton, PrimaryPushButton, TransparentPushButton,
     TitleLabel, SubtitleLabel, BodyLabel, CaptionLabel,
-    LineEdit, FluentIcon as FIF, InfoBar, InfoBarPosition
+    LineEdit, SegmentedWidget, FluentIcon as FIF, InfoBar, InfoBarPosition
 )
 from ui.common_widgets import NoWheelSpinBox
 from core.i18n import tr
@@ -81,6 +81,21 @@ class SchedulerView(QWidget):
         header_box.addWidget(self.c_desc)
         c_layout.addLayout(header_box)
 
+        # Action Type Selector (3 Clean Modes)
+        type_box = QVBoxLayout()
+        type_box.setSpacing(6)
+        self.lbl_action = BodyLabel(tr("lbl_action_type"), self.add_card)
+        type_box.addWidget(self.lbl_action)
+
+        self.type_selector = SegmentedWidget(self.add_card)
+        self.type_selector.addItem("turn_off", f"🔴 {tr('schedule_type_turn_off')}")
+        self.type_selector.addItem("instant", f"⚡ {tr('schedule_type_instant')}")
+        self.type_selector.addItem("gradual", f"🌅 {tr('schedule_type_gradual')}")
+        self.type_selector.setCurrentItem("turn_off")
+        self.type_selector.currentItemChanged.connect(self._on_action_type_changed)
+        type_box.addWidget(self.type_selector)
+        c_layout.addLayout(type_box)
+
         # Row 1: Name and Start Time
         row1 = QHBoxLayout()
         row1.setSpacing(16)
@@ -89,7 +104,7 @@ class SchedulerView(QWidget):
         self.lbl_name = BodyLabel(tr("lbl_rule_name"), self.add_card)
         name_box.addWidget(self.lbl_name)
         self.in_name = LineEdit(self.add_card)
-        self.in_name.setText(tr("def_rule_piter"))
+        self.in_name.setText(tr("def_rule_off"))
         name_box.addWidget(self.in_name)
         row1.addLayout(name_box, stretch=2)
 
@@ -98,70 +113,78 @@ class SchedulerView(QWidget):
         time_box.addWidget(self.lbl_time)
         self.in_time = QTimeEdit(self.add_card)
         self.in_time.setDisplayFormat("HH:mm")
-        self.in_time.setTime(QTime(13, 0))
+        self.in_time.setTime(QTime(23, 30))
         time_box.addWidget(self.in_time)
         row1.addLayout(time_box, stretch=1)
 
         c_layout.addLayout(row1)
 
-        # Row 2: Target Brightness and Target Kelvin (clamped to 6500K)
-        row2 = QHBoxLayout()
+        # Row 2 (Target brightness and Kelvin): Visible for Instant and Gradual
+        self.row2_widget = QWidget(self.add_card)
+        row2 = QHBoxLayout(self.row2_widget)
+        row2.setContentsMargins(0, 0, 0, 0)
         row2.setSpacing(16)
 
         target_b_box = QVBoxLayout()
-        self.lbl_tb = BodyLabel(tr("lbl_target_b"), self.add_card)
+        self.lbl_tb = BodyLabel(tr("lbl_target_b"), self.row2_widget)
         target_b_box.addWidget(self.lbl_tb)
-        self.in_target_b = NoWheelSpinBox(self.add_card)
+        self.in_target_b = NoWheelSpinBox(self.row2_widget)
         self.in_target_b.setRange(0, 100)
-        self.in_target_b.setValue(80)
+        self.in_target_b.setValue(50)
         target_b_box.addWidget(self.in_target_b)
         row2.addLayout(target_b_box)
 
         target_k_box = QVBoxLayout()
-        self.lbl_tk = BodyLabel(tr("lbl_target_k"), self.add_card)
+        self.lbl_tk = BodyLabel(tr("lbl_target_k"), self.row2_widget)
         target_k_box.addWidget(self.lbl_tk)
-        self.in_target_k = NoWheelSpinBox(self.add_card)
+        self.in_target_k = NoWheelSpinBox(self.row2_widget)
         self.in_target_k.setRange(2700, 6500)
         self.in_target_k.setSingleStep(100)
-        self.in_target_k.setValue(5600)
+        self.in_target_k.setValue(4500)
         target_k_box.addWidget(self.in_target_k)
         row2.addLayout(target_k_box)
 
-        c_layout.addLayout(row2)
+        c_layout.addWidget(self.row2_widget)
 
-        # Row 3: Step Interval, Step Brightness, Step Kelvin
-        row3 = QHBoxLayout()
+        # Row 3 (Step Interval, Step Brightness, Step Kelvin): Visible ONLY for Gradual
+        self.row3_widget = QWidget(self.add_card)
+        row3 = QHBoxLayout(self.row3_widget)
+        row3.setContentsMargins(0, 0, 0, 0)
         row3.setSpacing(16)
 
         interval_box = QVBoxLayout()
-        self.lbl_int = BodyLabel(tr("lbl_interval"), self.add_card)
+        self.lbl_int = BodyLabel(tr("lbl_interval"), self.row3_widget)
         interval_box.addWidget(self.lbl_int)
-        self.in_interval = NoWheelSpinBox(self.add_card)
+        self.in_interval = NoWheelSpinBox(self.row3_widget)
         self.in_interval.setRange(1, 120)
         self.in_interval.setValue(10)
         interval_box.addWidget(self.in_interval)
         row3.addLayout(interval_box)
 
         step_b_box = QVBoxLayout()
-        self.lbl_sb = BodyLabel(tr("lbl_step_b"), self.add_card)
+        self.lbl_sb = BodyLabel(tr("lbl_step_b"), self.row3_widget)
         step_b_box.addWidget(self.lbl_sb)
-        self.in_step_b = NoWheelSpinBox(self.add_card)
+        self.in_step_b = NoWheelSpinBox(self.row3_widget)
         self.in_step_b.setRange(1, 50)
         self.in_step_b.setValue(5)
         step_b_box.addWidget(self.in_step_b)
         row3.addLayout(step_b_box)
 
         step_k_box = QVBoxLayout()
-        self.lbl_sk = BodyLabel(tr("lbl_step_k"), self.add_card)
+        self.lbl_sk = BodyLabel(tr("lbl_step_k"), self.row3_widget)
         step_k_box.addWidget(self.lbl_sk)
-        self.in_step_k = NoWheelSpinBox(self.add_card)
+        self.in_step_k = NoWheelSpinBox(self.row3_widget)
         self.in_step_k.setRange(50, 1000)
         self.in_step_k.setSingleStep(50)
         self.in_step_k.setValue(200)
         step_k_box.addWidget(self.in_step_k)
         row3.addLayout(step_k_box)
 
-        c_layout.addLayout(row3)
+        c_layout.addWidget(self.row3_widget)
+
+        # Initially "turn_off" is selected: hide Row 2 & Row 3
+        self.row2_widget.hide()
+        self.row3_widget.hide()
 
         # Button
         b_box = QHBoxLayout()
@@ -170,6 +193,27 @@ class SchedulerView(QWidget):
         self.add_btn.clicked.connect(self._on_add_rule)
         b_box.addWidget(self.add_btn)
         c_layout.addLayout(b_box)
+
+    def _on_action_type_changed(self, route_key: str):
+        if route_key == "turn_off":
+            self.row2_widget.hide()
+            self.row3_widget.hide()
+            self.in_name.setText(tr("def_rule_off"))
+            self.in_time.setTime(QTime(23, 30))
+        elif route_key == "instant":
+            self.row2_widget.show()
+            self.row3_widget.hide()
+            self.in_name.setText(tr("def_rule_instant"))
+            self.in_time.setTime(QTime(8, 0))
+            self.in_target_b.setValue(50)
+            self.in_target_k.setValue(4500)
+        else: # gradual
+            self.row2_widget.show()
+            self.row3_widget.show()
+            self.in_name.setText(tr("def_rule_gradual"))
+            self.in_time.setTime(QTime(13, 0))
+            self.in_target_b.setValue(80)
+            self.in_target_k.setValue(5600)
 
     def _render_rules(self):
         # Clear existing cards in container
@@ -190,18 +234,29 @@ class SchedulerView(QWidget):
             title_row = QHBoxLayout()
             title_row.setSpacing(10)
             r_title = SubtitleLabel(rule["name"], card)
-            r_badge = CaptionLabel(tr("rule_badge_time", rule["start_time"], rule.get("interval_min", 10)), card)
-            r_badge.setStyleSheet("color: #0099FF; font-weight: bold;")
             title_row.addWidget(r_title)
+
+            action_type = rule.get("action_type", "gradual")
+            if action_type == "turn_off":
+                r_badge = CaptionLabel(f"🔴 {rule['start_time']}  •  {tr('schedule_badge_turn_off')}", card)
+                r_badge.setStyleSheet("color: #E74C3C; font-weight: bold;")
+                details_text = tr("rule_details_off")
+            elif action_type == "instant":
+                target_k = min(6500, max(2700, rule.get("target_kelvin", 4500)))
+                r_badge = CaptionLabel(f"⚡ {rule['start_time']}  •  {rule.get('target_brightness', 50)}%, {target_k}K", card)
+                r_badge.setStyleSheet("color: #0099FF; font-weight: bold;")
+                details_text = tr("rule_details_instant", rule.get("target_brightness", 50), target_k)
+            else:
+                target_k = min(6500, max(2700, rule.get("target_kelvin", 5600)))
+                r_badge = CaptionLabel(f"🌊 {rule['start_time']}  •  +{rule.get('step_brightness', 5)}% / {rule.get('interval_min', 10)} min", card)
+                r_badge.setStyleSheet("color: #FFA500; font-weight: bold;")
+                details_text = tr("rule_details", rule.get("target_brightness", 80), target_k, rule.get("step_brightness", 5), rule.get("step_kelvin", 200))
+
             title_row.addWidget(r_badge)
             title_row.addStretch()
             info_box.addLayout(title_row)
 
-            target_k = min(6500, rule.get("target_kelvin", 5600))
-            details = BodyLabel(
-                tr("rule_details", rule["target_brightness"], target_k, rule.get("step_brightness", 5), rule.get("step_kelvin", 200)),
-                card
-            )
+            details = BodyLabel(details_text, card)
             details.setStyleSheet("color: gray;")
             info_box.addWidget(details)
 
@@ -215,7 +270,7 @@ class SchedulerView(QWidget):
             actions_box = QHBoxLayout()
             actions_box.setSpacing(12)
 
-            # Test step button
+            # Test button
             test_btn = PushButton(FIF.PLAY, tr("btn_test_step"), card)
             test_btn.clicked.connect(lambda _, rid=rule["id"]: self.engine.run_test_step(rid))
             actions_box.addWidget(test_btn)
@@ -241,6 +296,10 @@ class SchedulerView(QWidget):
         self.desc.setText(tr("schedule_desc"))
         self.c_title.setText(tr("card_new_rule"))
         self.c_desc.setText(tr("card_new_rule_desc"))
+        self.lbl_action.setText(tr("lbl_action_type"))
+        self.type_selector.setItemText("turn_off", f"🔴 {tr('schedule_type_turn_off')}")
+        self.type_selector.setItemText("instant", f"⚡ {tr('schedule_type_instant')}")
+        self.type_selector.setItemText("gradual", f"🌅 {tr('schedule_type_gradual')}")
         self.lbl_name.setText(tr("lbl_rule_name"))
         self.lbl_time.setText(tr("lbl_start_time"))
         self.lbl_tb.setText(tr("lbl_target_b"))
@@ -252,19 +311,23 @@ class SchedulerView(QWidget):
         self._render_rules()
 
     def _on_add_rule(self):
-        name = self.in_name.text().strip() or "Custom Rule"
+        action_type = self.type_selector.currentRouteKey() or "turn_off"
         start_time = self.in_time.time().toString("HH:mm")
+        fallback_name = tr("def_rule_off") if action_type == "turn_off" else (tr("def_rule_instant") if action_type == "instant" else tr("def_rule_gradual"))
+        name = self.in_name.text().strip() or fallback_name
+
         new_rule = {
             "id": f"rule_{uuid.uuid4().hex[:8]}",
             "name": name,
             "enabled": True,
+            "action_type": action_type,
             "start_time": start_time,
-            "interval_min": self.in_interval.value(),
-            "target_brightness": self.in_target_b.value(),
-            "target_kelvin": min(6500, self.in_target_k.value()),
-            "step_brightness": self.in_step_b.value(),
-            "step_kelvin": self.in_step_k.value(),
-            "turn_on_if_off": True
+            "interval_min": self.in_interval.value() if action_type == "gradual" else 1,
+            "target_brightness": self.in_target_b.value() if action_type != "turn_off" else 0,
+            "target_kelvin": min(6500, max(2700, self.in_target_k.value())) if action_type != "turn_off" else 4500,
+            "step_brightness": self.in_step_b.value() if action_type == "gradual" else 100,
+            "step_kelvin": self.in_step_k.value() if action_type == "gradual" else 1000,
+            "turn_on_if_off": (action_type != "turn_off")
         }
         self.rules.append(new_rule)
         self.engine.update_rules(self.rules)

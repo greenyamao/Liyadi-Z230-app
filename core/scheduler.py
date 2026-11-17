@@ -48,27 +48,45 @@ class SchedulerEngine(QObject):
             r_id = rule["id"]
             state = self.runtime_state.get(r_id, {})
             start_time = rule.get("start_time", "12:00")
+            action_type = rule.get("action_type", "gradual")
 
             # Check if rule should trigger its start
             if current_time_str == start_time and state.get("last_triggered_date") != today_str:
                 state["last_triggered_date"] = today_str
-                state["is_running"] = True
-                state["last_step_time"] = now
-                self.runtime_state[r_id] = state
                 
-                target_k = min(6500, max(2700, rule.get("target_kelvin", 5600)))
-                self.rule_triggered.emit(
-                    rule["name"],
-                    f"{rule['name']} -> {rule['target_brightness']}%, {target_k}K"
-                )
-                
-                if rule.get("turn_on_if_off", True) and not self.ble_manager.is_on:
-                    self.ble_manager.set_power(True)
+                if action_type == "turn_off":
+                    state["is_running"] = False
+                    self.runtime_state[r_id] = state
+                    self.ble_manager.set_cct(False, 0, self.ble_manager.kelvin)
+                    self.status_updated.emit(r_id, tr("status_done"))
+                    self.rule_triggered.emit(rule["name"], f"{rule['name']}: {tr('schedule_badge_turn_off')}")
+                elif action_type == "instant":
+                    state["is_running"] = False
+                    self.runtime_state[r_id] = state
+                    target_b = max(0, min(100, rule.get("target_brightness", 50)))
+                    target_k = min(6500, max(2700, rule.get("target_kelvin", 4500)))
+                    self.ble_manager.set_cct(target_b > 0, target_b, target_k)
+                    self.status_updated.emit(r_id, tr("status_done"))
+                    self.rule_triggered.emit(rule["name"], f"{rule['name']}: {target_b}%, {target_k}K")
+                else:
+                    # gradual transition
+                    state["is_running"] = True
+                    state["last_step_time"] = now
+                    self.runtime_state[r_id] = state
+                    
+                    target_k = min(6500, max(2700, rule.get("target_kelvin", 5600)))
+                    self.rule_triggered.emit(
+                        rule["name"],
+                        f"{rule['name']} -> {rule['target_brightness']}%, {target_k}K"
+                    )
+                    
+                    if rule.get("turn_on_if_off", True) and not self.ble_manager.is_on:
+                        self.ble_manager.set_power(True)
 
-                self._execute_step(rule)
+                    self._execute_step(rule)
 
             # If rule is currently running its gradual transition
-            elif state.get("is_running", False):
+            elif state.get("is_running", False) and action_type == "gradual":
                 last_step = state.get("last_step_time")
                 interval_sec = rule.get("interval_min", 10) * 60
                 
@@ -116,10 +134,20 @@ class SchedulerEngine(QObject):
         return reached_b and reached_k
 
     def run_test_step(self, rule_id):
-        """Immediately executes one step for manual testing"""
+        """Immediately executes test for this rule"""
         for r in self.rules:
             if r["id"] == rule_id:
-                if not self.ble_manager.is_on:
-                    self.ble_manager.set_power(True)
-                self._execute_step(r)
+                action_type = r.get("action_type", "gradual")
+                if action_type == "turn_off":
+                    self.ble_manager.set_cct(False, 0, self.ble_manager.kelvin)
+                    self.status_updated.emit(rule_id, tr("status_done"))
+                elif action_type == "instant":
+                    target_b = max(0, min(100, r.get("target_brightness", 50)))
+                    target_k = min(6500, max(2700, r.get("target_kelvin", 4500)))
+                    self.ble_manager.set_cct(target_b > 0, target_b, target_k)
+                    self.status_updated.emit(rule_id, tr("status_done"))
+                else:
+                    if not self.ble_manager.is_on:
+                        self.ble_manager.set_power(True)
+                    self._execute_step(r)
                 break

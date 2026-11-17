@@ -56,9 +56,16 @@ def init_database():
                 step_kelvin INTEGER NOT NULL DEFAULT 200,
                 target_brightness INTEGER NOT NULL DEFAULT 80,
                 target_kelvin INTEGER NOT NULL DEFAULT 5600,
-                enabled INTEGER NOT NULL DEFAULT 1
+                enabled INTEGER NOT NULL DEFAULT 1,
+                action_type TEXT NOT NULL DEFAULT 'gradual'
             )
         """)
+
+        # Migration: ensure action_type column exists
+        cursor.execute("PRAGMA table_info(schedules)")
+        cols = [col[1] for col in cursor.fetchall()]
+        if "action_type" not in cols:
+            cursor.execute("ALTER TABLE schedules ADD COLUMN action_type TEXT NOT NULL DEFAULT 'gradual'")
         
         # Event logs table for auditing and tracking
         cursor.execute("""
@@ -169,6 +176,7 @@ def get_all_schedules() -> List[Dict[str, Any]]:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM schedules")
             for row in cursor.fetchall():
+                row_keys = row.keys()
                 rules.append({
                     "id": row["id"],
                     "name": row["name"],
@@ -178,7 +186,8 @@ def get_all_schedules() -> List[Dict[str, Any]]:
                     "step_kelvin": row["step_kelvin"],
                     "target_brightness": row["target_brightness"],
                     "target_kelvin": row["target_kelvin"],
-                    "enabled": bool(row["enabled"])
+                    "enabled": bool(row["enabled"]),
+                    "action_type": row["action_type"] if "action_type" in row_keys else "gradual"
                 })
     except Exception as e:
         print(f"DB get_all_schedules error: {e}")
@@ -194,8 +203,8 @@ def replace_all_schedules(rules: List[Dict[str, Any]]):
                 cursor.execute("""
                     INSERT INTO schedules (
                         id, name, start_time, interval_min, step_brightness, step_kelvin,
-                        target_brightness, target_kelvin, enabled
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        target_brightness, target_kelvin, enabled, action_type
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     rule["id"],
                     rule["name"],
@@ -205,7 +214,8 @@ def replace_all_schedules(rules: List[Dict[str, Any]]):
                     int(rule.get("step_kelvin", 200)),
                     int(rule.get("target_brightness", 80)),
                     int(rule.get("target_kelvin", 5600)),
-                    1 if rule.get("enabled", True) else 0
+                    1 if rule.get("enabled", True) else 0,
+                    rule.get("action_type", "gradual")
                 ))
             conn.commit()
     except Exception as e:
@@ -218,8 +228,8 @@ def save_schedule(rule: Dict[str, Any]):
             cursor.execute("""
                 INSERT OR REPLACE INTO schedules (
                     id, name, start_time, interval_min, step_brightness, step_kelvin,
-                    target_brightness, target_kelvin, enabled
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    target_brightness, target_kelvin, enabled, action_type
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 rule["id"],
                 rule["name"],
@@ -229,7 +239,8 @@ def save_schedule(rule: Dict[str, Any]):
                 int(rule.get("step_kelvin", 200)),
                 int(rule.get("target_brightness", 80)),
                 int(rule.get("target_kelvin", 5600)),
-                1 if rule.get("enabled", True) else 0
+                1 if rule.get("enabled", True) else 0,
+                rule.get("action_type", "gradual")
             ))
             conn.commit()
     except Exception as e:
