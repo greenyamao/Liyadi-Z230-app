@@ -9,7 +9,7 @@ from qfluentwidgets import (
     TitleLabel, SubtitleLabel, BodyLabel, CaptionLabel,
     LineEdit, SegmentedWidget, FluentIcon as FIF, InfoBar, InfoBarPosition
 )
-from ui.common_widgets import NoWheelSpinBox
+from ui.common_widgets import NoWheelSpinBox, NoWheelTimeEdit
 from core.i18n import tr
 
 class SchedulerView(QWidget):
@@ -111,7 +111,7 @@ class SchedulerView(QWidget):
         time_box = QVBoxLayout()
         self.lbl_time = BodyLabel(tr("lbl_start_time"), self.add_card)
         time_box.addWidget(self.lbl_time)
-        self.in_time = QTimeEdit(self.add_card)
+        self.in_time = NoWheelTimeEdit(self.add_card)
         self.in_time.setDisplayFormat("HH:mm")
         self.in_time.setTime(QTime(23, 30))
         time_box.addWidget(self.in_time)
