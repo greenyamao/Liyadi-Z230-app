@@ -1,9 +1,35 @@
+# Python bytecode & cache
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+
+# Local databases & user configs
 light_data.db
 config.json
+portable.txt
+*.log
+
+# PyInstaller & build distributions
 build/
 dist/
 *.spec
+*.exe
+*.zip
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE & Editor caches
 .idea/
 .vscode/
+*.sublime-project
+*.sublime-workspace
+
+# OS metadata
+Thumbs.db
+desktop.ini
+.DS_Store
