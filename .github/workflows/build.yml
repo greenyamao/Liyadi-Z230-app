@@ -1,0 +1,84 @@
+name: Build Windows Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: Generate Icon assets if missing
+      run: |
+        python -c "
+        import os
+        from PySide6.QtWidgets import QApplication
+        from PySide6.QtGui import QPixmap, QPainter, QColor, QBrush, QPen, QRadialGradient, QLinearGradient
+        from PySide6.QtCore import Qt, QPointF
+        app = QApplication([])
+        os.makedirs('resources', exist_ok=True)
+        size = 256
+        pix = QPixmap(size, size)
+        pix.fill(Qt.transparent)
+        p = QPainter(pix)
+        p.setRenderHint(QPainter.Antialiasing)
+        rg = QRadialGradient(QPointF(128, 128), 120)
+        rg.setColorAt(0.0, QColor(255, 180, 0, 240))
+        rg.setColorAt(0.5, QColor(255, 120, 0, 180))
+        rg.setColorAt(1.0, QColor(255, 50, 0, 0))
+        p.setBrush(QBrush(rg))
+        p.setPen(Qt.NoPen)
+        p.drawEllipse(8, 8, 240, 240)
+        p.end()
+        pix.save('resources/icon.png', 'PNG')
+        pix.save('resources/icon.ico', 'ICO')
+        "
+
+    - name: Build with PyInstaller
+      run: |
+        pyinstaller --noconsole --name "Liadi" --icon "resources/icon.ico" --add-data "resources;resources" --hidden-import "qfluentwidgets" --hidden-import "bleak" --clean --noconfirm main.py
+
+    - name: Package Portable ZIP
+      run: |
+        New-Item -ItemType File -Path "dist/Liadi/portable.txt" -Force
+        Compress-Archive -Path "dist/Liadi/*" -DestinationPath "dist/Liadi-Windows-Portable.zip" -Force
+
+    - name: Install Inno Setup
+      run: |
+        choco install innosetup --no-progress
+
+    - name: Build Installer with Inno Setup
+      run: |
+        & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: |
+          dist/Liadi-Windows-Portable.zip
+          dist/Liadi-v1.0.0-UserSetup.exe
+        draft: false
+        prerelease: false
+        generate_release_notes: true

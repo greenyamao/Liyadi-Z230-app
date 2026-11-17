@@ -7,9 +7,11 @@ RUN_KEY_PATH = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
 def get_launch_command() -> str:
     """Returns the python/executable launch command with --minimized flag"""
+    if getattr(sys, 'frozen', False):
+        exe = sys.executable
+        return f'"{exe}" --minimized'
     python_exe = sys.executable
     script_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "main.py")
-    # For python scripts, launch pythonw if available to avoid console window on startup
     pythonw_exe = python_exe.replace("python.exe", "pythonw.exe")
     exe = pythonw_exe if os.path.exists(pythonw_exe) else python_exe
     return f'"{exe}" "{script_path}" --minimized'

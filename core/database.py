@@ -1,10 +1,31 @@
 import sqlite3
 import json
 import os
+import sys
 from typing import Any, Dict, List, Optional
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "light_data.db")
-CONFIG_JSON_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
+def get_app_dir() -> str:
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+def get_data_dir() -> str:
+    app_dir = get_app_dir()
+    # If portable.txt or light_data.db is present next to app, use local folder (portable mode)
+    if os.path.exists(os.path.join(app_dir, "portable.txt")) or os.path.exists(os.path.join(app_dir, "light_data.db")):
+        return app_dir
+    
+    # Otherwise use standard Windows AppData folder
+    appdata = os.getenv("APPDATA")
+    if appdata:
+        target = os.path.join(appdata, "LiadiLight")
+    else:
+        target = os.path.join(os.path.expanduser("~"), ".liadilight")
+    os.makedirs(target, exist_ok=True)
+    return target
+
+DB_PATH = os.path.join(get_data_dir(), "light_data.db")
+CONFIG_JSON_PATH = os.path.join(get_data_dir(), "config.json")
 
 def get_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)

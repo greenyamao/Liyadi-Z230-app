@@ -2,10 +2,8 @@ import json
 import os
 from core.database import (
     init_database, get_all_settings, get_all_schedules,
-    set_setting, replace_all_schedules, DB_PATH
+    set_setting, replace_all_schedules, DB_PATH, CONFIG_JSON_PATH
 )
-
-CONFIG_JSON_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
 
 # Initialize database schema and initial migration
 init_database()
