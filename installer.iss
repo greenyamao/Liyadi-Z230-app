@@ -2,7 +2,7 @@
 #define MyAppName "Liadi Light Controller"
 #define MyAppVersion "1.0.0"
 #define MyAppPublisher "greenyamao"
-#define MyAppURL "https://github.com/greenyamao/light"
+#define MyAppURL "https://github.com/greenyamao/Liyadi-Z230-app"
 #define MyAppExeName "Liadi.exe"
 
 [Setup]

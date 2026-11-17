@@ -14,11 +14,11 @@ Modern Windows 11 Fluent UI desktop controller for **Liadi Z230 Bi-Color** (and 
 ## Download & Installation
 
 1. **Option A: Portable (Recommended)**
-   - Download `Liadi-Windows-Portable.zip` from [Releases](https://github.com/greenyamao/light/releases).
+   - Download `Liadi-Windows-Portable.zip` from [Releases](https://github.com/greenyamao/Liyadi-Z230-app/releases).
    - Unpack anywhere and launch `Liadi.exe`.
 
 2. **Option B: Windows Installer**
-   - Download `Liadi-UserSetup.exe` from [Releases](https://github.com/greenyamao/light/releases).
+   - Download `Liadi-UserSetup.exe` from [Releases](https://github.com/greenyamao/Liyadi-Z230-app/releases).
    - Installs to `%LOCALAPPDATA%\Programs\LiadiLight` (no administrator rights needed) and creates Start Menu and Desktop shortcuts.
 
 > [!NOTE]
