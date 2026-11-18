@@ -116,6 +116,7 @@ class MainWindow(MSFluentWindow):
                 if self.plug.enabled and self.plug.auto_power_on:
                     self.plug.turn_on()
             self.ble.set_cct(True, brightness, kelvin)
+            self.ble.wake_and_connect()
 
     def _on_language_changed(self, lang_code: str):
         set_language(lang_code)
@@ -153,6 +154,7 @@ class MainWindow(MSFluentWindow):
                 if self.plug.enabled and self.plug.auto_power_on:
                     self.plug.turn_on()
             self.ble.set_brightness(val)
+            self.ble.wake_and_connect()
 
         self.config["last_brightness"] = val
         self.config["last_power"] = (val > 0)
@@ -181,6 +183,7 @@ class MainWindow(MSFluentWindow):
                 if self.plug.enabled and self.plug.auto_power_on:
                     self.plug.turn_on()
             self.ble.set_cct(True, target_b, self.ble.kelvin)
+            self.ble.wake_and_connect()
         else:
             self.ble.set_cct(False, 0, self.ble.kelvin)
             if self.plug and self.plug.enabled and self.plug.auto_power_off:
@@ -254,6 +257,9 @@ def main():
     ble.is_on = config.get("last_power", True)
     ble.brightness = config.get("last_brightness", 1)
     ble.kelvin = min(6500, max(2700, config.get("last_kelvin", 4500)))
+    ble.target_power = ble.is_on
+    ble.target_brightness = ble.brightness
+    ble.target_kelvin = ble.kelvin
     ble.start()
 
     # 4. Start smart plug manager

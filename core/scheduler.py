@@ -70,9 +70,11 @@ class SchedulerEngine(QObject):
                         self.plug_manager.cancel_cooldown()
                         if self.plug_manager.enabled and self.plug_manager.auto_power_on:
                             self.plug_manager.turn_on()
+                    self.ble_manager.wake_and_connect()
                     target_b = max(0, min(100, rule.get("target_brightness", 50)))
                     target_k = min(6500, max(2700, rule.get("target_kelvin", 4500)))
                     self.ble_manager.set_cct(target_b > 0, target_b, target_k)
+                    self.ble_manager.wake_and_connect()
                     self.status_updated.emit(r_id, tr("status_done"))
                     self.rule_triggered.emit(rule["name"], f"{rule['name']}: {target_b}%, {target_k}K")
                 else:
@@ -85,6 +87,7 @@ class SchedulerEngine(QObject):
                         self.plug_manager.cancel_cooldown()
                         if self.plug_manager.enabled and self.plug_manager.auto_power_on:
                             self.plug_manager.turn_on()
+                    self.ble_manager.wake_and_connect()
 
                     target_k = min(6500, max(2700, rule.get("target_kelvin", 5600)))
                     self.rule_triggered.emit(

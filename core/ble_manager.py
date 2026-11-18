@@ -1,5 +1,6 @@
 import asyncio
 import threading
+import time
 from PySide6.QtCore import QObject, Signal
 from bleak import BleakScanner, BleakClient
 
@@ -22,6 +23,12 @@ class BLEManager(QObject):
         self.is_on = True
         self.brightness = 1
         self.kelvin = 4500
+
+        self.target_power = self.is_on
+        self.target_brightness = self.brightness
+        self.target_kelvin = self.kelvin
+        self._ignore_notifications_until = 0.0
+        self._wake_event = None
         
         self.client = None
         self.loop = None
@@ -41,32 +48,57 @@ class BLEManager(QObject):
         self.loop.run_until_complete(self._main_worker())
 
     async def _main_worker(self):
+        self._wake_event = asyncio.Event()
         while self.running:
             if not self._connected and self.auto_connect:
                 await self._try_connect()
-            await asyncio.sleep(4.0)
+
+            if not self._connected:
+                # Wait up to 2.5s before retrying, or wake immediately if wake_and_connect is called
+                try:
+                    self._wake_event.clear()
+                    await asyncio.wait_for(self._wake_event.wait(), timeout=2.5)
+                except asyncio.TimeoutError:
+                    pass
+            else:
+                await asyncio.sleep(1.0)
+
+    def wake_and_connect(self):
+        """Immediately wakes up BLE worker loop to start connecting without waiting for sleep."""
+        if self.loop and self.loop.is_running():
+            def _wake():
+                if self._wake_event and not self._wake_event.is_set():
+                    self._wake_event.set()
+            self.loop.call_soon_threadsafe(_wake)
 
     async def _try_connect(self):
         try:
             self.connection_status_changed.emit("connecting", "")
             dev = None
             
-            # First try direct address if known
-            if self.target_mac:
+            # First try direct address if known and not the default dummy
+            if self.target_mac and self.target_mac != "12:22:33:44:D6:55":
                 try:
-                    dev = await BleakScanner.find_device_by_address(self.target_mac, timeout=3.0)
+                    dev = await BleakScanner.find_device_by_address(self.target_mac, timeout=1.5)
                 except Exception:
                     dev = None
 
-            # If not found by address, scan for device with LTF name or service
+            # If not found by address, scan for device with LTF / LYD / Bough name or service UUID
             if not dev:
-                devs = await BleakScanner.discover(timeout=4.0, return_adv=True)
+                devs = await BleakScanner.discover(timeout=2.5, return_adv=True)
                 for d, adv in devs.values():
                     name = d.name or adv.local_name or ""
                     uuids = [u.lower() for u in adv.service_uuids]
                     if any(p.lower() in name.lower() for p in NAME_PREFIXES) or SERVICE_UUID in uuids:
                         dev = d
                         self.target_mac = d.address
+                        try:
+                            from core.database import set_setting
+                            set_setting("device_mac", d.address)
+                            if name:
+                                set_setting("device_name", name)
+                        except Exception:
+                            pass
                         break
 
             if not dev:
@@ -79,11 +111,15 @@ class BLEManager(QObject):
                 self._connected = False
                 self.connection_status_changed.emit("disconnected", "")
 
-            self.client = BleakClient(dev, disconnected_callback=disconnected_callback, timeout=10.0)
+            self.client = BleakClient(dev, disconnected_callback=disconnected_callback, timeout=8.0)
             await self.client.connect()
             self._connected = True
             dev_name = dev.name or "Liadi Z230"
             self.connection_status_changed.emit("connected", dev_name)
+
+            # Ignore incoming boot notifications for 2.0s so lamp's default boot brightness
+            # doesn't overwrite the user's requested target brightness
+            self._ignore_notifications_until = time.time() + 2.0
 
             # Subscribe to hardware knob notifications (2-way sync)
             try:
@@ -91,8 +127,10 @@ class BLEManager(QObject):
             except Exception as e:
                 print(f"Notify error: {e}")
 
-            # Send initial state sync
-            await self._send_state_packet(self.is_on, self.brightness, self.kelvin)
+            # Send target state burst to ensure lamp microcontroller applies it immediately!
+            await self._send_state_packet(self.target_power, self.target_brightness, self.target_kelvin)
+            await asyncio.sleep(0.15)
+            await self._send_state_packet(self.target_power, self.target_brightness, self.target_kelvin)
 
             # Wait while connected
             while self.running and self._connected and self.client and self.client.is_connected:
@@ -104,6 +142,10 @@ class BLEManager(QObject):
 
     def _on_notification(self, sender, data: bytearray):
         """Called when user rotates physical knobs on the lamp"""
+        # If we just connected, ignore incoming boot-up status packets
+        if time.time() < self._ignore_notifications_until:
+            return
+
         if len(data) >= 4:
             mode = data[0]
             brightness = data[2]
@@ -114,7 +156,10 @@ class BLEManager(QObject):
             if not is_on:
                 brightness = 0
 
-            # Update local state
+            # Update target and local state
+            self.target_power = is_on
+            self.target_brightness = brightness
+            self.target_kelvin = kelvin
             self.is_on = is_on
             self.brightness = brightness
             self.kelvin = kelvin
@@ -158,6 +203,9 @@ class BLEManager(QObject):
 
     # Public thread-safe methods to be called from Qt UI thread
     def set_cct(self, power: bool, brightness: int, kelvin: int):
+        self.target_power = power
+        self.target_brightness = brightness
+        self.target_kelvin = kelvin
         self.is_on = power
         self.brightness = brightness
         self.kelvin = kelvin
