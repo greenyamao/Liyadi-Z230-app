@@ -281,8 +281,8 @@ class SettingsView(QWidget):
 
         self.lbl_qr_img = QLabel(self.qr_box)
         self.lbl_qr_img.setAlignment(Qt.AlignCenter)
-        self.lbl_qr_img.setFixedSize(200, 200)
-        self.lbl_qr_img.setStyleSheet("background: white; border-radius: 8px; padding: 4px;")
+        self.lbl_qr_img.setFixedSize(250, 250)
+        self.lbl_qr_img.setStyleSheet("background: white; border-radius: 8px; padding: 6px;")
         qr_box_layout.addWidget(self.lbl_qr_img, alignment=Qt.AlignCenter)
 
         self.lbl_qr_status = CaptionLabel(tr("lbl_scan_qr_desc"), self.qr_box)
@@ -414,7 +414,7 @@ class SettingsView(QWidget):
     def _on_qr_ready(self, png_bytes: bytes):
         pix = QPixmap()
         pix.loadFromData(png_bytes)
-        self.lbl_qr_img.setPixmap(pix.scaled(190, 190, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        self.lbl_qr_img.setPixmap(pix.scaled(240, 240, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         self.lbl_qr_status.setText(tr("lbl_scan_qr_desc"))
 
     def _on_auth_success(self, dev_name: str):
