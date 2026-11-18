@@ -13,6 +13,7 @@ from core.i18n import tr, set_language, get_language
 from core.config import load_config, save_config
 from core.ble_manager import BLEManager
 from core.scheduler import SchedulerEngine
+from core.smart_plug import SmartPlugManager
 from ui.light_view import LightView
 from ui.scheduler_view import SchedulerView
 from ui.effects_view import EffectsView
@@ -20,11 +21,12 @@ from ui.settings_view import SettingsView
 from ui.tray_manager import TrayManager, create_tray_icon_pixmap
 
 class MainWindow(MSFluentWindow):
-    def __init__(self, config: dict, ble: BLEManager, scheduler: SchedulerEngine, start_minimized=False):
+    def __init__(self, config: dict, ble: BLEManager, scheduler: SchedulerEngine, plug: SmartPlugManager = None, start_minimized=False):
         super().__init__()
         self.config = config
         self.ble = ble
         self.scheduler = scheduler
+        self.plug = plug
         self.start_minimized = start_minimized
 
         self.setWindowTitle(tr("app_title"))
@@ -54,7 +56,7 @@ class MainWindow(MSFluentWindow):
         self.addSubInterface(self.effects_view, FIF.PALETTE, tr("nav_effects"))
 
         # 4. Settings Interface (at bottom)
-        self.settings_view = SettingsView(self.config, self)
+        self.settings_view = SettingsView(self.config, self.plug, self)
         self.settings_view.setObjectName("settings_interface")
         self.addSubInterface(
             self.settings_view,
@@ -92,9 +94,21 @@ class MainWindow(MSFluentWindow):
 
         # Tray signals
         self.tray.power_toggled.connect(self._toggle_power_from_tray)
-        self.tray.preset_clicked.connect(lambda b, k: self.ble.set_cct(b > 0, b, min(6500, k)))
+        self.tray.preset_clicked.connect(lambda b, k: self._apply_cct_with_plug(b > 0, b, min(6500, k)))
         self.tray.show_window_requested.connect(self._restore_from_tray)
         self.tray.exit_requested.connect(self._quit_application)
+
+    def _apply_cct_with_plug(self, power: bool, brightness: int, kelvin: int):
+        if not power or brightness <= 0:
+            self.ble.set_cct(False, 0, kelvin)
+            if self.plug and self.plug.enabled and self.plug.auto_power_off:
+                self.plug.start_cooldown()
+        else:
+            if self.plug:
+                self.plug.cancel_cooldown()
+                if self.plug.enabled and self.plug.auto_power_on:
+                    self.plug.turn_on()
+            self.ble.set_cct(True, brightness, kelvin)
 
     def _on_language_changed(self, lang_code: str):
         set_language(lang_code)
@@ -122,7 +136,17 @@ class MainWindow(MSFluentWindow):
         self.tray.retranslate_ui()
 
     def _on_brightness_changed(self, val: int):
-        self.ble.set_brightness(val)
+        if val <= 0:
+            self.ble.set_brightness(0)
+            if self.plug and self.plug.enabled and self.plug.auto_power_off:
+                self.plug.start_cooldown()
+        else:
+            if self.plug:
+                self.plug.cancel_cooldown()
+                if self.plug.enabled and self.plug.auto_power_on:
+                    self.plug.turn_on()
+            self.ble.set_brightness(val)
+
         self.config["last_brightness"] = val
         self.config["last_power"] = (val > 0)
         save_config(self.config)
@@ -145,9 +169,15 @@ class MainWindow(MSFluentWindow):
         new_power = not self.ble.is_on
         if new_power:
             target_b = self.ble.brightness if self.ble.brightness > 0 else 30
+            if self.plug:
+                self.plug.cancel_cooldown()
+                if self.plug.enabled and self.plug.auto_power_on:
+                    self.plug.turn_on()
             self.ble.set_cct(True, target_b, self.ble.kelvin)
         else:
             self.ble.set_cct(False, 0, self.ble.kelvin)
+            if self.plug and self.plug.enabled and self.plug.auto_power_off:
+                self.plug.start_cooldown()
         self.config["last_power"] = new_power
         save_config(self.config)
 
@@ -219,11 +249,14 @@ def main():
     ble.kelvin = min(6500, max(2700, config.get("last_kelvin", 4500)))
     ble.start()
 
-    # 4. Start scheduler
-    scheduler = SchedulerEngine(ble, config.get("schedules", []))
+    # 4. Start smart plug manager
+    plug = SmartPlugManager()
 
-    # 5. Create window
-    win = MainWindow(config, ble, scheduler, start_minimized=start_minimized)
+    # 5. Start scheduler
+    scheduler = SchedulerEngine(ble, config.get("schedules", []), plug_manager=plug)
+
+    # 6. Create window
+    win = MainWindow(config, ble, scheduler, plug, start_minimized=start_minimized)
 
     if not start_minimized:
         win.show()

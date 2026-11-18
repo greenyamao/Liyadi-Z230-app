@@ -7,10 +7,11 @@ class SchedulerEngine(QObject):
     status_updated = Signal(str, str)                # rule_id, status_text
     rule_triggered = Signal(str, str)                # rule_name, message
 
-    def __init__(self, ble_manager, rules=None):
+    def __init__(self, ble_manager, rules=None, plug_manager=None):
         super().__init__()
         self.ble_manager = ble_manager
         self.rules = rules or []
+        self.plug_manager = plug_manager
         
         # State tracking: {rule_id: {"last_triggered_date": "YYYY-MM-DD", "active": bool, "next_step_time": datetime}}
         self.runtime_state = {}
@@ -58,11 +59,17 @@ class SchedulerEngine(QObject):
                     state["is_running"] = False
                     self.runtime_state[r_id] = state
                     self.ble_manager.set_cct(False, 0, self.ble_manager.kelvin)
+                    if self.plug_manager and self.plug_manager.enabled and self.plug_manager.auto_power_off:
+                        self.plug_manager.start_cooldown()
                     self.status_updated.emit(r_id, tr("status_done"))
                     self.rule_triggered.emit(rule["name"], f"{rule['name']}: {tr('schedule_badge_turn_off')}")
                 elif action_type == "instant":
                     state["is_running"] = False
                     self.runtime_state[r_id] = state
+                    if self.plug_manager:
+                        self.plug_manager.cancel_cooldown()
+                        if self.plug_manager.enabled and self.plug_manager.auto_power_on:
+                            self.plug_manager.turn_on()
                     target_b = max(0, min(100, rule.get("target_brightness", 50)))
                     target_k = min(6500, max(2700, rule.get("target_kelvin", 4500)))
                     self.ble_manager.set_cct(target_b > 0, target_b, target_k)
@@ -74,6 +81,11 @@ class SchedulerEngine(QObject):
                     state["last_step_time"] = now
                     self.runtime_state[r_id] = state
                     
+                    if self.plug_manager:
+                        self.plug_manager.cancel_cooldown()
+                        if self.plug_manager.enabled and self.plug_manager.auto_power_on:
+                            self.plug_manager.turn_on()
+
                     target_k = min(6500, max(2700, rule.get("target_kelvin", 5600)))
                     self.rule_triggered.emit(
                         rule["name"],

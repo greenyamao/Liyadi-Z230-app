@@ -1,24 +1,29 @@
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QScrollArea, QFrame
+    QWidget, QVBoxLayout, QHBoxLayout, QScrollArea, QFrame, QLabel
 )
 from qfluentwidgets import (
-    CardWidget, SwitchButton, LineEdit, PushButton,
+    CardWidget, SwitchButton, LineEdit, PushButton, PrimaryPushButton, TransparentPushButton,
     TitleLabel, SubtitleLabel, BodyLabel, CaptionLabel, ComboBox,
     FluentIcon as FIF, setTheme, Theme, InfoBar, InfoBarPosition
 )
 from core.autostart import is_autostart_enabled, set_autostart
 from core.i18n import tr, set_language, get_language, LANGUAGES
+from core.smart_plug import SmartPlugManager
+from ui.common_widgets import NoWheelSpinBox
 
 class SettingsView(QWidget):
     config_updated = Signal(dict)
     language_changed = Signal(str)
     scan_requested = Signal()
 
-    def __init__(self, config: dict, parent=None):
+    def __init__(self, config: dict, plug: SmartPlugManager = None, parent=None):
         super().__init__(parent)
         self.config = config
+        self.plug = plug
         self._init_ui()
+        self._connect_plug_signals()
 
     def _init_ui(self):
         main_layout = QVBoxLayout(self)
@@ -109,16 +114,175 @@ class SettingsView(QWidget):
 
         content_layout.addWidget(sys_card)
 
-        # 2. Appearance & Language Card
+        # 2. Smart Plug (Tuya 220V) Card
+        self.plug_card = CardWidget(scroll_content)
+        p_layout = QVBoxLayout(self.plug_card)
+        p_layout.setContentsMargins(24, 20, 24, 20)
+        p_layout.setSpacing(16)
+
+        self.sec_plug_lbl = SubtitleLabel(tr("sec_smart_plug"), self.plug_card)
+        self.desc_plug_lbl = CaptionLabel(tr("desc_smart_plug"), self.plug_card)
+        self.desc_plug_lbl.setStyleSheet("color: gray;")
+        p_layout.addWidget(self.sec_plug_lbl)
+        p_layout.addWidget(self.desc_plug_lbl)
+
+        # Enable Switch Row
+        r_enable_plug = QHBoxLayout()
+        self.lbl_enable_plug = BodyLabel(tr("lbl_enable_plug"), self.plug_card)
+        r_enable_plug.addWidget(self.lbl_enable_plug)
+        r_enable_plug.addStretch()
+
+        self.sw_plug_enable = SwitchButton(self.plug_card)
+        self.sw_plug_enable.setOnText(tr("val_on"))
+        self.sw_plug_enable.setOffText(tr("val_off"))
+        self.sw_plug_enable.setChecked(self.plug.enabled if self.plug else False)
+        self.sw_plug_enable.checkedChanged.connect(self._on_plug_enable_toggled)
+        r_enable_plug.addWidget(self.sw_plug_enable)
+        p_layout.addLayout(r_enable_plug)
+
+        # Container for plug settings (hidden when plug disabled)
+        self.plug_body_widget = QWidget(self.plug_card)
+        pb_layout = QVBoxLayout(self.plug_body_widget)
+        pb_layout.setContentsMargins(0, 8, 0, 0)
+        pb_layout.setSpacing(16)
+
+        # Status & Manual Control Row
+        r_status = QHBoxLayout()
+        r_status.setSpacing(12)
+        self.lbl_plug_status_title = BodyLabel(tr("lbl_plug_status"), self.plug_body_widget)
+        self.lbl_plug_device_name = BodyLabel(
+            self.plug.device_name if (self.plug and self.plug.device_name) else "—",
+            self.plug_body_widget
+        )
+        self.lbl_plug_device_name.setStyleSheet("font-weight: bold; color: #00bcd4;")
+        r_status.addWidget(self.lbl_plug_status_title)
+        r_status.addWidget(self.lbl_plug_device_name)
+        r_status.addStretch()
+
+        self.btn_plug_on = PushButton(tr("btn_plug_on"), self.plug_body_widget)
+        self.btn_plug_on.clicked.connect(lambda: self.plug.turn_on() if self.plug else None)
+        self.btn_plug_off = PushButton(tr("btn_plug_off"), self.plug_body_widget)
+        self.btn_plug_off.clicked.connect(lambda: self.plug.turn_off() if self.plug else None)
+        r_status.addWidget(self.btn_plug_on)
+        r_status.addWidget(self.btn_plug_off)
+        pb_layout.addLayout(r_status)
+
+        # Separator line
+        sep1 = QFrame(self.plug_body_widget)
+        sep1.setFrameShape(QFrame.HLine)
+        sep1.setStyleSheet("color: rgba(255, 255, 255, 0.08);")
+        pb_layout.addWidget(sep1)
+
+        # Automation Row 1: Cut AC power after turning light off
+        r_auto_off = QHBoxLayout()
+        auto_off_box = QVBoxLayout()
+        self.lbl_auto_off = BodyLabel(tr("lbl_auto_power_off"), self.plug_body_widget)
+        self.lbl_auto_off_desc = CaptionLabel(tr("tip_cooldown_delay"), self.plug_body_widget)
+        self.lbl_auto_off_desc.setStyleSheet("color: gray;")
+        auto_off_box.addWidget(self.lbl_auto_off)
+        auto_off_box.addWidget(self.lbl_auto_off_desc)
+        r_auto_off.addLayout(auto_off_box)
+        r_auto_off.addStretch()
+
+        self.sw_auto_off = SwitchButton(self.plug_body_widget)
+        self.sw_auto_off.setOnText(tr("val_on"))
+        self.sw_auto_off.setOffText(tr("val_off"))
+        self.sw_auto_off.setChecked(self.plug.auto_power_off if self.plug else True)
+        self.sw_auto_off.checkedChanged.connect(self._save_plug_settings)
+        r_auto_off.addWidget(self.sw_auto_off)
+        pb_layout.addLayout(r_auto_off)
+
+        # Automation Row 2: Cooldown delay (SpinBox)
+        r_delay = QHBoxLayout()
+        self.lbl_cooldown_delay = BodyLabel(tr("lbl_cooldown_delay"), self.plug_body_widget)
+        r_delay.addWidget(self.lbl_cooldown_delay)
+        r_delay.addStretch()
+
+        self.in_cooldown_delay = NoWheelSpinBox(self.plug_body_widget)
+        self.in_cooldown_delay.setRange(5, 180)
+        self.in_cooldown_delay.setSingleStep(5)
+        self.in_cooldown_delay.setValue(self.plug.cooldown_sec if self.plug else 30)
+        self.in_cooldown_delay.valueChanged.connect(self._save_plug_settings)
+        r_delay.addWidget(self.in_cooldown_delay)
+        pb_layout.addLayout(r_delay)
+
+        # Automation Row 3: Power on plug first when turning light on
+        r_auto_on = QHBoxLayout()
+        self.lbl_auto_on = BodyLabel(tr("lbl_auto_power_on"), self.plug_body_widget)
+        r_auto_on.addWidget(self.lbl_auto_on)
+        r_auto_on.addStretch()
+
+        self.sw_auto_on = SwitchButton(self.plug_body_widget)
+        self.sw_auto_on.setOnText(tr("val_on"))
+        self.sw_auto_on.setOffText(tr("val_off"))
+        self.sw_auto_on.setChecked(self.plug.auto_power_on if self.plug else True)
+        self.sw_auto_on.checkedChanged.connect(self._save_plug_settings)
+        r_auto_on.addWidget(self.sw_auto_on)
+        pb_layout.addLayout(r_auto_on)
+
+        # Separator line
+        sep2 = QFrame(self.plug_body_widget)
+        sep2.setFrameShape(QFrame.HLine)
+        sep2.setStyleSheet("color: rgba(255, 255, 255, 0.08);")
+        pb_layout.addWidget(sep2)
+
+        # QR Code Pairing Section
+        qr_header = QVBoxLayout()
+        self.lbl_qr_title = SubtitleLabel(tr("lbl_qr_pairing"), self.plug_body_widget)
+        self.lbl_qr_desc = CaptionLabel(tr("ph_user_code"), self.plug_body_widget)
+        self.lbl_qr_desc.setStyleSheet("color: gray;")
+        qr_header.addWidget(self.lbl_qr_title)
+        qr_header.addWidget(self.lbl_qr_desc)
+        pb_layout.addLayout(qr_header)
+
+        r_qr_input = QHBoxLayout()
+        self.in_user_code = LineEdit(self.plug_body_widget)
+        self.in_user_code.setPlaceholderText(tr("lbl_user_code"))
+        r_qr_input.addWidget(self.in_user_code, stretch=2)
+
+        self.btn_gen_qr = PrimaryPushButton(tr("btn_gen_qr"), self.plug_body_widget)
+        self.btn_gen_qr.clicked.connect(self._on_generate_qr_clicked)
+        r_qr_input.addWidget(self.btn_gen_qr, stretch=1)
+        pb_layout.addLayout(r_qr_input)
+
+        # QR Code Display Container (initially hidden)
+        self.qr_box = QWidget(self.plug_body_widget)
+        qr_box_layout = QVBoxLayout(self.qr_box)
+        qr_box_layout.setAlignment(Qt.AlignCenter)
+        qr_box_layout.setSpacing(10)
+
+        self.lbl_qr_img = QLabel(self.qr_box)
+        self.lbl_qr_img.setAlignment(Qt.AlignCenter)
+        self.lbl_qr_img.setFixedSize(200, 200)
+        self.lbl_qr_img.setStyleSheet("background: white; border-radius: 8px; padding: 4px;")
+        qr_box_layout.addWidget(self.lbl_qr_img, alignment=Qt.AlignCenter)
+
+        self.lbl_qr_status = CaptionLabel(tr("lbl_scan_qr_desc"), self.qr_box)
+        self.lbl_qr_status.setAlignment(Qt.AlignCenter)
+        self.lbl_qr_status.setStyleSheet("color: #00bcd4; font-weight: bold;")
+        qr_box_layout.addWidget(self.lbl_qr_status)
+
+        self.btn_cancel_qr = TransparentPushButton(tr("btn_cancel_qr"), self.qr_box)
+        self.btn_cancel_qr.clicked.connect(self._on_cancel_qr_clicked)
+        qr_box_layout.addWidget(self.btn_cancel_qr, alignment=Qt.AlignCenter)
+
+        self.qr_box.hide()
+        pb_layout.addWidget(self.qr_box)
+
+        self.plug_body_widget.setVisible(self.plug.enabled if self.plug else False)
+        p_layout.addWidget(self.plug_body_widget)
+        content_layout.addWidget(self.plug_card)
+
+        # 3. Appearance Card
         theme_card = CardWidget(scroll_content)
         t_layout = QVBoxLayout(theme_card)
         t_layout.setContentsMargins(24, 20, 24, 20)
-        t_layout.setSpacing(18)
+        t_layout.setSpacing(20)
 
         self.sec_app_lbl = SubtitleLabel(tr("sec_appearance"), theme_card)
         t_layout.addWidget(self.sec_app_lbl)
 
-        # Language Row
+        # Language row
         lang_row = QHBoxLayout()
         lang_info = QVBoxLayout()
         lang_info.setSpacing(4)
@@ -136,14 +300,13 @@ class SettingsView(QWidget):
         lang_row.addWidget(self.lang_combo)
         t_layout.addLayout(lang_row)
 
-        # Theme Row
+        # Theme row
         theme_row = QHBoxLayout()
         theme_info = QVBoxLayout()
         theme_info.setSpacing(4)
         self.lbl_theme_title = BodyLabel(tr("lbl_theme"), theme_card)
         self.lbl_theme_desc = CaptionLabel(tr("desc_theme"), theme_card)
-        theme_desc = self.lbl_theme_desc
-        theme_desc.setStyleSheet("color: gray;")
+        self.lbl_theme_desc.setStyleSheet("color: gray;")
         theme_info.addWidget(self.lbl_theme_title)
         theme_info.addWidget(self.lbl_theme_desc)
         theme_row.addLayout(theme_info)
@@ -158,7 +321,7 @@ class SettingsView(QWidget):
 
         content_layout.addWidget(theme_card)
 
-        # 3. Device Hardware Info Card
+        # 4. Device Hardware Info Card
         dev_card = CardWidget(scroll_content)
         self.d_layout = QVBoxLayout(dev_card)
         self.d_layout.setContentsMargins(24, 20, 24, 20)
@@ -177,6 +340,75 @@ class SettingsView(QWidget):
 
         scroll.setWidget(scroll_content)
         main_layout.addWidget(scroll)
+
+    def _connect_plug_signals(self):
+        if not self.plug:
+            return
+        self.plug.qr_ready.connect(self._on_qr_ready)
+        self.plug.auth_success.connect(self._on_auth_success)
+        self.plug.auth_failed.connect(self._on_auth_failed)
+        self.plug.device_updated.connect(lambda name, dev_id, ip: self.lbl_plug_device_name.setText(name))
+
+    def _on_plug_enable_toggled(self, checked):
+        if self.plug:
+            self.plug.enabled = checked
+            self._save_plug_settings()
+        self.plug_body_widget.setVisible(checked)
+
+    def _save_plug_settings(self):
+        if not self.plug:
+            return
+        self.plug.update_settings(
+            enabled=self.sw_plug_enable.isChecked(),
+            cooldown_sec=self.in_cooldown_delay.value(),
+            auto_power_off=self.sw_auto_off.isChecked(),
+            auto_power_on=self.sw_auto_on.isChecked()
+        )
+
+    def _on_generate_qr_clicked(self):
+        if not self.plug:
+            return
+        code = self.in_user_code.text().strip()
+        if not code:
+            InfoBar.warning(tr("sec_smart_plug"), tr("lbl_user_code"), parent=self)
+            return
+        self.btn_gen_qr.setEnabled(False)
+        self.lbl_qr_status.setText(tr("lbl_qr_waiting"))
+        self.qr_box.show()
+        self.plug.start_qr_login(code)
+
+    def _on_cancel_qr_clicked(self):
+        if self.plug:
+            self.plug.cancel_qr_login()
+        self.qr_box.hide()
+        self.btn_gen_qr.setEnabled(True)
+
+    def _on_qr_ready(self, png_bytes: bytes):
+        pix = QPixmap()
+        pix.loadFromData(png_bytes)
+        self.lbl_qr_img.setPixmap(pix.scaled(190, 190, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        self.lbl_qr_status.setText(tr("lbl_scan_qr_desc"))
+
+    def _on_auth_success(self, dev_name: str):
+        self.qr_box.hide()
+        self.btn_gen_qr.setEnabled(True)
+        self.lbl_plug_device_name.setText(dev_name)
+        InfoBar.success(
+            tr("sec_smart_plug"),
+            tr("msg_plug_auth_ok", dev_name),
+            parent=self,
+            duration=4000
+        )
+
+    def _on_auth_failed(self, err_msg: str):
+        self.btn_gen_qr.setEnabled(True)
+        self.lbl_qr_status.setText(err_msg)
+        InfoBar.error(
+            tr("sec_smart_plug"),
+            tr("msg_plug_auth_err", err_msg),
+            parent=self,
+            duration=4000
+        )
 
     def _populate_language_combo(self):
         self.lang_combo.blockSignals(True)
@@ -237,6 +469,30 @@ class SettingsView(QWidget):
         self.sw_min.setOffText(tr("val_off"))
         self.sw_close.setOnText(tr("val_on"))
         self.sw_close.setOffText(tr("val_off"))
+
+        # Smart plug card retranslate
+        self.sec_plug_lbl.setText(tr("sec_smart_plug"))
+        self.desc_plug_lbl.setText(tr("desc_smart_plug"))
+        self.lbl_enable_plug.setText(tr("lbl_enable_plug"))
+        self.sw_plug_enable.setOnText(tr("val_on"))
+        self.sw_plug_enable.setOffText(tr("val_off"))
+        self.lbl_plug_status_title.setText(tr("lbl_plug_status"))
+        self.btn_plug_on.setText(tr("btn_plug_on"))
+        self.btn_plug_off.setText(tr("btn_plug_off"))
+        self.lbl_auto_off.setText(tr("lbl_auto_power_off"))
+        self.lbl_auto_off_desc.setText(tr("tip_cooldown_delay"))
+        self.sw_auto_off.setOnText(tr("val_on"))
+        self.sw_auto_off.setOffText(tr("val_off"))
+        self.lbl_cooldown_delay.setText(tr("lbl_cooldown_delay"))
+        self.lbl_auto_on.setText(tr("lbl_auto_power_on"))
+        self.sw_auto_on.setOnText(tr("val_on"))
+        self.sw_auto_on.setOffText(tr("val_off"))
+        self.lbl_qr_title.setText(tr("lbl_qr_pairing"))
+        self.lbl_qr_desc.setText(tr("ph_user_code"))
+        self.in_user_code.setPlaceholderText(tr("lbl_user_code"))
+        self.btn_gen_qr.setText(tr("btn_gen_qr"))
+        self.btn_cancel_qr.setText(tr("btn_cancel_qr"))
+
         self.sec_app_lbl.setText(tr("sec_appearance"))
         self.lbl_lang_title.setText(tr("lbl_language"))
         self.lbl_lang_desc.setText(tr("desc_language"))
