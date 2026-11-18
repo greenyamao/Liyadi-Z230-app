@@ -33,10 +33,10 @@ class SettingsView(QWidget):
         self.title_lbl = TitleLabel(tr("settings_title"), self)
         main_layout.addWidget(self.title_lbl)
 
-        scroll = QScrollArea(self)
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        self.scroll = QScrollArea(self)
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setFrameShape(QFrame.NoFrame)
+        self.scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
         scroll_content = QWidget()
         scroll_content.setStyleSheet("QWidget { background: transparent; }")
         content_layout = QVBoxLayout(scroll_content)
@@ -146,7 +146,25 @@ class SettingsView(QWidget):
         pb_layout.setContentsMargins(0, 8, 0, 0)
         pb_layout.setSpacing(16)
 
-        # Status & Manual Control Row
+        # Connection status banner
+        self.plug_status_card = CardWidget(self.plug_body_widget)
+        psc_layout = QHBoxLayout(self.plug_status_card)
+        psc_layout.setContentsMargins(18, 14, 18, 14)
+        psc_layout.setSpacing(14)
+
+        self.lbl_plug_status_icon = CaptionLabel("🔌", self.plug_status_card)
+        self.lbl_plug_status_info = BodyLabel("", self.plug_status_card)
+        psc_layout.addWidget(self.lbl_plug_status_icon)
+        psc_layout.addWidget(self.lbl_plug_status_info)
+        psc_layout.addStretch()
+
+        self.btn_test_toggle = PushButton("⚡ " + tr("btn_test_plug"), self.plug_status_card)
+        self.btn_test_toggle.clicked.connect(self._on_test_toggle_clicked)
+        psc_layout.addWidget(self.btn_test_toggle)
+
+        pb_layout.addWidget(self.plug_status_card)
+
+        # Manual Control Row
         r_status = QHBoxLayout()
         r_status.setSpacing(12)
         self.lbl_plug_status_title = BodyLabel(tr("lbl_plug_status"), self.plug_body_widget)
@@ -199,7 +217,7 @@ class SettingsView(QWidget):
         r_delay.addStretch()
 
         self.in_cooldown_delay = NoWheelSpinBox(self.plug_body_widget)
-        self.in_cooldown_delay.setRange(5, 180)
+        self.in_cooldown_delay.setRange(0, 180)
         self.in_cooldown_delay.setSingleStep(5)
         self.in_cooldown_delay.setValue(self.plug.cooldown_sec if self.plug else 30)
         self.in_cooldown_delay.valueChanged.connect(self._save_plug_settings)
@@ -236,14 +254,24 @@ class SettingsView(QWidget):
         pb_layout.addLayout(qr_header)
 
         r_qr_input = QHBoxLayout()
+        r_qr_input.setSpacing(8)
         self.in_user_code = LineEdit(self.plug_body_widget)
         self.in_user_code.setPlaceholderText(tr("lbl_user_code"))
+        if self.plug and self.plug.user_code:
+            self.in_user_code.setText(self.plug.user_code)
+        self.in_user_code.textChanged.connect(self._on_user_code_changed)
         r_qr_input.addWidget(self.in_user_code, stretch=2)
+
+        self.btn_save_code = PushButton(tr("btn_save_code"), self.plug_body_widget)
+        self.btn_save_code.clicked.connect(self._on_save_code_clicked)
+        r_qr_input.addWidget(self.btn_save_code)
 
         self.btn_gen_qr = PrimaryPushButton(tr("btn_gen_qr"), self.plug_body_widget)
         self.btn_gen_qr.clicked.connect(self._on_generate_qr_clicked)
         r_qr_input.addWidget(self.btn_gen_qr, stretch=1)
         pb_layout.addLayout(r_qr_input)
+
+        self._update_plug_status_ui()
 
         # QR Code Display Container (initially hidden)
         self.qr_box = QWidget(self.plug_body_widget)
@@ -338,8 +366,8 @@ class SettingsView(QWidget):
         content_layout.addWidget(dev_card)
         content_layout.addStretch()
 
-        scroll.setWidget(scroll_content)
-        main_layout.addWidget(scroll)
+        self.scroll.setWidget(scroll_content)
+        main_layout.addWidget(self.scroll)
 
     def _connect_plug_signals(self):
         if not self.plug:
@@ -392,7 +420,7 @@ class SettingsView(QWidget):
     def _on_auth_success(self, dev_name: str):
         self.qr_box.hide()
         self.btn_gen_qr.setEnabled(True)
-        self.lbl_plug_device_name.setText(dev_name)
+        self._update_plug_status_ui()
         InfoBar.success(
             tr("sec_smart_plug"),
             tr("msg_plug_auth_ok", dev_name),
@@ -409,6 +437,45 @@ class SettingsView(QWidget):
             parent=self,
             duration=4000
         )
+
+    def _update_plug_status_ui(self):
+        if not hasattr(self, 'lbl_plug_status_icon'):
+            return
+        if not self.plug or not self.plug.device_id:
+            self.lbl_plug_status_icon.setText("⚠️")
+            self.lbl_plug_status_info.setText(tr("status_plug_not_linked"))
+            self.lbl_plug_status_info.setStyleSheet("color: #ffb74d; font-weight: bold;")
+            self.btn_test_toggle.setEnabled(False)
+            self.lbl_plug_device_name.setText("—")
+        else:
+            self.lbl_plug_status_icon.setText("✅")
+            dev_name = self.plug.device_name or "Smart Plug"
+            self.lbl_plug_status_info.setText(tr("status_plug_linked", dev_name))
+            self.lbl_plug_status_info.setStyleSheet("color: #4caf50; font-weight: bold;")
+            self.btn_test_toggle.setEnabled(True)
+            self.lbl_plug_device_name.setText(dev_name)
+
+    def _on_user_code_changed(self, text):
+        from core.database import set_setting
+        val = text.strip()
+        set_setting("tuya_user_code", val)
+        if self.plug:
+            self.plug.user_code = val
+
+    def _on_save_code_clicked(self):
+        self._on_user_code_changed(self.in_user_code.text())
+        InfoBar.success(
+            tr("sec_smart_plug"),
+            tr("msg_code_saved"),
+            parent=self,
+            duration=2500
+        )
+
+    def _on_test_toggle_clicked(self):
+        if self.plug:
+            self.plug.toggle()
+            status_text = tr("val_on") if self.plug._is_on else tr("val_off")
+            InfoBar.info(tr("sec_smart_plug"), f"{tr('lbl_plug_status')} {status_text}", parent=self, duration=2000)
 
     def _populate_language_combo(self):
         self.lang_combo.blockSignals(True)
@@ -492,6 +559,11 @@ class SettingsView(QWidget):
         self.in_user_code.setPlaceholderText(tr("lbl_user_code"))
         self.btn_gen_qr.setText(tr("btn_gen_qr"))
         self.btn_cancel_qr.setText(tr("btn_cancel_qr"))
+        if hasattr(self, 'btn_save_code'):
+            self.btn_save_code.setText(tr("btn_save_code"))
+        if hasattr(self, 'btn_test_toggle'):
+            self.btn_test_toggle.setText("⚡ " + tr("btn_test_plug"))
+        self._update_plug_status_ui()
 
         self.sec_app_lbl.setText(tr("sec_appearance"))
         self.lbl_lang_title.setText(tr("lbl_language"))

@@ -20,6 +20,12 @@ LANGUAGES = {
 
 TRANSLATIONS: Dict[str, Dict[str, str]] = {
     "en": {
+        "btn_save_code": "Save Code",
+        "msg_code_saved": "User code saved locally",
+        "btn_test_plug": "Test Plug (Toggle)",
+        "status_plug_not_linked": "Not paired yet. Enter user code and click Generate QR Code below.",
+        "status_plug_linked": "Connected: {0} (Ready)",
+        "btn_cut_power_now": "Turn Off Now",
         "sec_smart_plug": "Smart Plug (Tuya 220V)",
         "desc_smart_plug": "Automate AC power to stop the fan and save energy when the light is off",
         "lbl_enable_plug": "Enable Smart Plug Integration",
@@ -174,6 +180,12 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "val_off": "Off"
     },
     "ru": {
+        "btn_save_code": "Сохранить код",
+        "msg_code_saved": "Код пользователя сохранён локально",
+        "btn_test_plug": "Тест розетки (Щёлкнуть)",
+        "status_plug_not_linked": "Розетка ещё не привязана. Нажмите «Сгенерировать QR-код» ниже.",
+        "status_plug_linked": "Розетка привязана: {0} (Готова к работе)",
+        "btn_cut_power_now": "Выключить сейчас",
         "sec_smart_plug": "Умная розетка (Tuya 220V)",
         "desc_smart_plug": "Автоматическое управление питанием 220V для отключения кулера и тишины",
         "lbl_enable_plug": "Включить интеграцию с умной розеткой",
@@ -321,6 +333,12 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "val_off": "Выкл"
     },
     "zh": {
+        "btn_save_code": "保存用户码",
+        "msg_code_saved": "用户码已本地保存",
+        "btn_test_plug": "测试插座开关",
+        "status_plug_not_linked": "尚未绑定。请输入用户码并点击下方生成二维码。",
+        "status_plug_linked": "已连接: {0} (就绪)",
+        "btn_cut_power_now": "立即关闭",
         "sec_smart_plug": "智能插座 (Tuya 220V)",
         "desc_smart_plug": "关灯后切断电源以完全停止风扇噪音",
         "lbl_enable_plug": "启用智能插座集成",
@@ -468,6 +486,12 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "val_off": "关"
     },
     "ja": {
+        "btn_save_code": "コードを保存",
+        "msg_code_saved": "ユーザーコードを保存しました",
+        "btn_test_plug": "テスト切替",
+        "status_plug_not_linked": "未連携です。コードを入力しQRコードを生成してください。",
+        "status_plug_linked": "連携済み: {0} (準備完了)",
+        "btn_cut_power_now": "今すぐ切断",
         "sec_smart_plug": "スマートプラグ (Tuya 220V)",
         "desc_smart_plug": "消灯後に電源を遮断しファンを完全に停止",
         "lbl_enable_plug": "スマートプラグ連携を有効化",
@@ -615,6 +639,12 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "val_off": "オフ"
     },
     "de": {
+        "btn_save_code": "Code speichern",
+        "msg_code_saved": "Benutzercode lokal gespeichert",
+        "btn_test_plug": "Steckdose testen",
+        "status_plug_not_linked": "Noch nicht gekoppelt. Benutzercode eingeben und QR-Code generieren.",
+        "status_plug_linked": "Gekoppelt: {0} (Bereit)",
+        "btn_cut_power_now": "Jetzt ausschalten",
         "sec_smart_plug": "Smarte Steckdose (Tuya 220V)",
         "desc_smart_plug": "Strom abschalten, um den Lüfter bei ausgeschaltetem Licht zu stoppen",
         "lbl_enable_plug": "Steckdosen-Integration aktivieren",
@@ -762,6 +792,12 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "val_off": "Aus"
     },
     "fr": {
+        "btn_save_code": "Enregistrer le code",
+        "msg_code_saved": "Code utilisateur enregistré localement",
+        "btn_test_plug": "Tester la prise",
+        "status_plug_not_linked": "Non jumelée. Saisissez le code et générez le QR Code ci-dessous.",
+        "status_plug_linked": "Connectée: {0} (Prête)",
+        "btn_cut_power_now": "Éteindre maintenant",
         "sec_smart_plug": "Prise Connectée (Tuya 220V)",
         "desc_smart_plug": "Couper le courant pour arrêter le ventilateur quand la lumière est éteinte",
         "lbl_enable_plug": "Activer l'intégration de la prise connectée",
@@ -909,6 +945,12 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "val_off": "Désactivé"
     },
     "ko": {
+        "btn_save_code": "코드 저장",
+        "msg_code_saved": "사용자 코드가 저장되었습니다",
+        "btn_test_plug": "플러그 테스트",
+        "status_plug_not_linked": "연동되지 않음. 사용자 코드를 입력하고 QR 코드를 생성하세요.",
+        "status_plug_linked": "연결됨: {0} (준비 완료)",
+        "btn_cut_power_now": "지금 끄기",
         "sec_smart_plug": "스마트 플러그 (Tuya 220V)",
         "desc_smart_plug": "조명이 꺼졌을 때 팬 소음을 멈추기 위해 전원 차단",
         "lbl_enable_plug": "스마트 플러그 연동 활성화",
@@ -1056,6 +1098,12 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "val_off": "꺼짐"
     },
     "hi": {
+        "btn_save_code": "कोड सहेजें",
+        "msg_code_saved": "यूजर कोड सहेजा गया",
+        "btn_test_plug": "प्लग टेस्ट करें",
+        "status_plug_not_linked": "अभी जुड़ा नहीं है। यूजर कोड दर्ज करें और QR कोड बनाएं।",
+        "status_plug_linked": "सफलतापूर्वक जुड़ा: {0} (तैयार)",
+        "btn_cut_power_now": "अभी बंद करें",
         "sec_smart_plug": "स्मार्ट प्लग (Tuya 220V)",
         "desc_smart_plug": "लाइट बंद होने पर पंखे की आवाज रोकने के लिए पावर कट करें",
         "lbl_enable_plug": "स्मार्ट प्लग सक्षम करें",

@@ -92,6 +92,13 @@ class MainWindow(MSFluentWindow):
         self.settings_view.config_updated.connect(self._on_config_updated)
         self.settings_view.language_changed.connect(self._on_language_changed)
 
+        # Smart plug cooldown signals -> Light view UI banner
+        if self.plug:
+            self.plug.cooldown_tick.connect(self.light_view.show_cooldown_progress)
+            self.plug.cooldown_finished.connect(self.light_view.hide_cooldown_banner)
+            self.plug.cooldown_cancelled.connect(self.light_view.hide_cooldown_banner)
+            self.light_view.cut_power_requested.connect(self.plug.cut_power_immediately)
+
         # Tray signals
         self.tray.power_toggled.connect(self._toggle_power_from_tray)
         self.tray.preset_clicked.connect(lambda b, k: self._apply_cct_with_plug(b > 0, b, min(6500, k)))

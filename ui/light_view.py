@@ -2,7 +2,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPainter, QBrush, QColor
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFrame
 from qfluentwidgets import (
-    CardWidget, PillPushButton, PushButton,
+    CardWidget, PillPushButton, PushButton, TransparentPushButton,
     TitleLabel, SubtitleLabel, BodyLabel, CaptionLabel,
     FluentIcon as FIF
 )
@@ -36,6 +36,7 @@ class LightView(QWidget):
     brightness_changed = Signal(int)
     kelvin_changed = Signal(int)
     reconnect_requested = Signal()
+    cut_power_requested = Signal()
 
     def __init__(self, ble_manager, parent=None):
         super().__init__(parent)
@@ -72,6 +73,23 @@ class LightView(QWidget):
         title_box.addLayout(status_box)
 
         main_layout.addLayout(title_box)
+
+        # Cooldown notification banner
+        self.cooldown_banner = CardWidget(self)
+        cb_layout = QHBoxLayout(self.cooldown_banner)
+        cb_layout.setContentsMargins(20, 12, 20, 12)
+        cb_layout.setSpacing(12)
+        self.lbl_cd_icon = CaptionLabel("⏳", self.cooldown_banner)
+        self.lbl_cd_msg = BodyLabel("", self.cooldown_banner)
+        self.lbl_cd_msg.setStyleSheet("color: #00bcd4; font-weight: bold;")
+        self.btn_cut_power_now = TransparentPushButton(tr("btn_cut_power_now"), self.cooldown_banner)
+        self.btn_cut_power_now.clicked.connect(self.cut_power_requested.emit)
+        cb_layout.addWidget(self.lbl_cd_icon)
+        cb_layout.addWidget(self.lbl_cd_msg)
+        cb_layout.addStretch()
+        cb_layout.addWidget(self.btn_cut_power_now)
+        self.cooldown_banner.hide()
+        main_layout.addWidget(self.cooldown_banner)
 
         # 1. Brightness Card (0% = Standby / OFF)
         self.bright_card = CardWidget(self)
@@ -222,6 +240,14 @@ class LightView(QWidget):
     def _connect_signals(self):
         self.b_slider.valueChanged.connect(self._on_brightness_slider)
         self.c_slider.valueChanged.connect(self._on_kelvin_slider)
+
+    def show_cooldown_progress(self, seconds_left: int):
+        self.lbl_cd_msg.setText(tr("status_plug_cooldown", seconds_left))
+        self.btn_cut_power_now.setText(tr("btn_cut_power_now"))
+        self.cooldown_banner.show()
+
+    def hide_cooldown_banner(self):
+        self.cooldown_banner.hide()
 
     def _on_brightness_slider(self, val):
         self.b_val_label.setText(self._format_brightness_label(val))

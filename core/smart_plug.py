@@ -44,6 +44,7 @@ class SmartPlugManager(QObject):
         self.cooldown_sec = int(get_setting("plug_cooldown_sec", 30))
         self.auto_power_off = bool(get_setting("plug_auto_power_off", True))
         self.auto_power_on = bool(get_setting("plug_auto_power_on", True))
+        self.user_code = str(get_setting("tuya_user_code", ""))
 
         self._session = get_setting("tuya_session", None)
         self._manager: Optional[Manager] = None
@@ -111,6 +112,9 @@ class SmartPlugManager(QObject):
         if not user_code:
             self.auth_failed.emit("Введите код пользователя Smart Life")
             return
+
+        self.user_code = user_code
+        set_setting("tuya_user_code", user_code)
 
         self._cancel_login = False
         self._login_thread = threading.Thread(
@@ -262,9 +266,20 @@ class SmartPlugManager(QObject):
         if not self.enabled or not self.auto_power_off:
             return
 
-        self._remaining_cooldown = max(5, self.cooldown_sec)
+        if self.cooldown_sec <= 0:
+            self.turn_off()
+            self.cooldown_finished.emit()
+            return
+
+        self._remaining_cooldown = self.cooldown_sec
         self._cooldown_timer.start()
         self.cooldown_tick.emit(self._remaining_cooldown)
+
+    def cut_power_immediately(self):
+        """Instantly cuts power without waiting for remaining cooldown timer."""
+        self.cancel_cooldown()
+        self.turn_off()
+        self.cooldown_finished.emit()
 
     def cancel_cooldown(self):
         if self._cooldown_timer.isActive():
@@ -289,7 +304,7 @@ class SmartPlugManager(QObject):
     def update_settings(self, enabled: bool, cooldown_sec: int, auto_power_off: bool, auto_power_on: bool,
                         ip: str = "", device_id: str = "", local_key: str = "", device_name: str = ""):
         self.enabled = enabled
-        self.cooldown_sec = max(5, min(300, cooldown_sec))
+        self.cooldown_sec = max(0, min(300, cooldown_sec))
         self.auto_power_off = auto_power_off
         self.auto_power_on = auto_power_on
 
