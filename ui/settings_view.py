@@ -221,6 +221,7 @@ class SettingsView(QWidget):
         self.in_cooldown_delay.setSingleStep(5)
         self.in_cooldown_delay.setValue(self.plug.cooldown_sec if self.plug else 30)
         self.in_cooldown_delay.valueChanged.connect(self._save_plug_settings)
+        self._update_cooldown_desc(self.in_cooldown_delay.value())
         r_delay.addWidget(self.in_cooldown_delay)
         pb_layout.addLayout(r_delay)
 
@@ -386,12 +387,21 @@ class SettingsView(QWidget):
     def _save_plug_settings(self):
         if not self.plug:
             return
+        delay = self.in_cooldown_delay.value()
+        self._update_cooldown_desc(delay)
         self.plug.update_settings(
             enabled=self.sw_plug_enable.isChecked(),
-            cooldown_sec=self.in_cooldown_delay.value(),
+            cooldown_sec=delay,
             auto_power_off=self.sw_auto_off.isChecked(),
             auto_power_on=self.sw_auto_on.isChecked()
         )
+
+    def _update_cooldown_desc(self, sec: int):
+        if hasattr(self, 'lbl_auto_off_desc'):
+            if sec <= 0:
+                self.lbl_auto_off_desc.setText(tr("tip_cooldown_instant"))
+            else:
+                self.lbl_auto_off_desc.setText(tr("tip_cooldown_delay", sec))
 
     def _on_generate_qr_clicked(self):
         if not self.plug:
@@ -547,7 +557,7 @@ class SettingsView(QWidget):
         self.btn_plug_on.setText(tr("btn_plug_on"))
         self.btn_plug_off.setText(tr("btn_plug_off"))
         self.lbl_auto_off.setText(tr("lbl_auto_power_off"))
-        self.lbl_auto_off_desc.setText(tr("tip_cooldown_delay"))
+        self._update_cooldown_desc(self.in_cooldown_delay.value())
         self.sw_auto_off.setOnText(tr("val_on"))
         self.sw_auto_off.setOffText(tr("val_off"))
         self.lbl_cooldown_delay.setText(tr("lbl_cooldown_delay"))

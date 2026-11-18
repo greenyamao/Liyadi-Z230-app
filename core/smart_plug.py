@@ -231,20 +231,24 @@ class SmartPlugManager(QObject):
     def _execute_power_command(self, is_on: bool):
         success = False
 
-        # 1. Try local LAN via tinytuya if IP and Local Key are known
+        # 1. Try local LAN via tinytuya ONLY if IP is a private LAN address (e.g. 192.168.x.x)
         if self.device_id and self.ip and self.local_key:
             try:
-                plug = tinytuya.OutletDevice(self.device_id, self.ip, self.local_key)
-                plug.set_version(3.3)
-                plug.set_socketPersistent(False)
-                res = plug.turn_on() if is_on else plug.turn_off()
-                if isinstance(res, dict) and "Error" not in res:
-                    success = True
-                    logger.info(f"Local LAN command successful: is_on={is_on}")
+                import ipaddress
+                ip_obj = ipaddress.ip_address(self.ip)
+                if ip_obj.is_private:
+                    plug = tinytuya.OutletDevice(self.device_id, self.ip, self.local_key)
+                    plug.set_version(3.3)
+                    plug.set_socketPersistent(False)
+                    plug.set_socketTimeout(1.0)
+                    res = plug.turn_on() if is_on else plug.turn_off()
+                    if isinstance(res, dict) and "Error" not in res:
+                        success = True
+                        logger.info(f"Local LAN command successful: is_on={is_on}")
             except Exception as e:
-                logger.debug(f"Local LAN command failed: {e}")
+                logger.debug(f"Local LAN command skipped or failed: {e}")
 
-        # 2. Fallback to Cloud API via tuya_sharing
+        # 2. Fast Cloud API via tuya_sharing (runs in ~350ms)
         if not success and self._manager and self.device_id:
             try:
                 # Try standard Tuya socket DPS code "switch_1"
@@ -269,6 +273,10 @@ class SmartPlugManager(QObject):
     def start_cooldown(self):
         """Starts countdown before cutting 220V power to allow fan to cool the COB LED."""
         if not self.enabled or not self.auto_power_off:
+            return
+
+        # Crucial guard: do not restart timer if cooldown is already running
+        if self._cooldown_timer.isActive():
             return
 
         if self.cooldown_sec <= 0:
