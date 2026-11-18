@@ -21,6 +21,8 @@ class StatusDot(QWidget):
             self._color = "#107C41"  # Fluent green
         elif status == "connecting":
             self._color = "#FFB900"  # Fluent amber
+        elif status == "disconnected":
+            self._color = "#8A8886"  # Calm gray
         else:
             self._color = "#D83B01"  # Fluent red
         self.update()
@@ -42,7 +44,8 @@ class LightView(QWidget):
         super().__init__(parent)
         self.ble = ble_manager
         self._block_signals = False
-        self.last_status_code = "connecting"
+        initial_status = "connecting" if (self.ble and self.ble.is_on and self.ble.brightness > 0) else "disconnected"
+        self.last_status_code = initial_status
         self.last_status_detail = ""
 
         self._init_ui()
@@ -60,7 +63,14 @@ class LightView(QWidget):
         title_box.addStretch()
 
         self.status_dot = StatusDot(self)
-        self.status_label = CaptionLabel(tr("status_connecting"), self)
+        self.status_dot.set_status(self.last_status_code)
+        if self.last_status_code == "connecting":
+            lbl_text = tr("status_connecting")
+        elif self.ble and self.ble.brightness <= 0:
+            lbl_text = tr("status_lamp_off")
+        else:
+            lbl_text = tr("status_disconnected")
+        self.status_label = CaptionLabel(lbl_text, self)
         self.reconnect_btn = PushButton(FIF.SYNC, tr("btn_reconnect"), self)
         self.reconnect_btn.clicked.connect(self.reconnect_requested.emit)
 
@@ -252,6 +262,8 @@ class LightView(QWidget):
     def _on_brightness_slider(self, val):
         self.b_val_label.setText(self._format_brightness_label(val))
         self._apply_brightness_label_style(val)
+        if self.last_status_code == "disconnected":
+            self._refresh_status_text()
         if not self._block_signals:
             self.brightness_changed.emit(val)
 
@@ -296,7 +308,10 @@ class LightView(QWidget):
         elif status == "connecting":
             self.status_label.setText(tr("status_connecting"))
         elif status == "disconnected":
-            self.status_label.setText(tr("status_disconnected"))
+            if self.b_slider.value() <= 0:
+                self.status_label.setText(tr("status_lamp_off"))
+            else:
+                self.status_label.setText(tr("status_disconnected"))
         elif status == "error":
             msg = f"{tr('status_error')}: {detail}" if detail else tr("status_error")
             self.status_label.setText(msg)

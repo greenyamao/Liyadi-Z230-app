@@ -50,14 +50,17 @@ class BLEManager(QObject):
     async def _main_worker(self):
         self._wake_event = asyncio.Event()
         while self.running:
-            if not self._connected and self.auto_connect:
+            should_connect = self.auto_connect and self.is_on and (self.brightness > 0)
+            if not self._connected and should_connect:
                 await self._try_connect()
 
             if not self._connected:
-                # Wait up to 2.5s before retrying, or wake immediately if wake_and_connect is called
+                # If light is supposed to be ON, retry periodically (every 3.0s).
+                # If light is OFF (0%), sleep indefinitely until wake_and_connect() is called!
                 try:
                     self._wake_event.clear()
-                    await asyncio.wait_for(self._wake_event.wait(), timeout=2.5)
+                    timeout = 3.0 if (self.is_on and self.brightness > 0) else None
+                    await asyncio.wait_for(self._wake_event.wait(), timeout=timeout)
                 except asyncio.TimeoutError:
                     pass
             else:
@@ -71,7 +74,11 @@ class BLEManager(QObject):
                     self._wake_event.set()
             self.loop.call_soon_threadsafe(_wake)
 
-    async def _try_connect(self):
+    async def _try_connect(self, force=False):
+        if not force and (not self.auto_connect or not self.is_on or self.brightness <= 0):
+            self.connection_status_changed.emit("disconnected", "")
+            return
+
         try:
             self.connection_status_changed.emit("connecting", "")
             dev = None
@@ -203,6 +210,8 @@ class BLEManager(QObject):
 
     # Public thread-safe methods to be called from Qt UI thread
     def set_cct(self, power: bool, brightness: int, kelvin: int):
+        if brightness <= 0:
+            power = False
         self.target_power = power
         self.target_brightness = brightness
         self.target_kelvin = kelvin
@@ -244,7 +253,7 @@ class BLEManager(QObject):
             except Exception:
                 pass
         self._connected = False
-        await self._try_connect()
+        await self._try_connect(force=True)
 
     def stop(self):
         self.running = False
