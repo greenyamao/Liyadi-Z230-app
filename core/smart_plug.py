@@ -66,6 +66,24 @@ class SmartPlugManager(QObject):
         if self._session:
             threading.Thread(target=self._init_manager, daemon=True).start()
 
+        # Background token refresh timer (every 45 minutes) to prevent 2-hour expiration
+        self._refresh_timer = QTimer(self)
+        self._refresh_timer.setInterval(45 * 60 * 1000)
+        self._refresh_timer.timeout.connect(self._periodic_token_refresh)
+        self._refresh_timer.start()
+
+    def _periodic_token_refresh(self):
+        if self._manager and hasattr(self._manager, 'customer_api'):
+            threading.Thread(target=self._run_token_refresh, daemon=True).start()
+
+    def _run_token_refresh(self):
+        try:
+            if self._manager and hasattr(self._manager, 'customer_api'):
+                self._manager.customer_api.refresh_access_token_if_need()
+                logger.info("Periodic Tuya token refresh completed.")
+        except Exception as e:
+            logger.debug(f"Periodic token refresh attempt: {e}")
+
     def _init_manager(self):
         if not self._session:
             return

@@ -272,6 +272,20 @@ class SettingsView(QWidget):
         r_qr_input.addWidget(self.btn_gen_qr, stretch=1)
         pb_layout.addLayout(r_qr_input)
 
+        # Local LAN IP (Direct permanent control without cloud)
+        r_lan_ip = QHBoxLayout()
+        r_lan_ip.setSpacing(8)
+        self.in_plug_ip = LineEdit(self.plug_body_widget)
+        self.in_plug_ip.setPlaceholderText(tr("lbl_plug_ip") + " (напр. 192.168.0.50 для вечной работы без облака)")
+        if self.plug and self.plug.ip:
+            self.in_plug_ip.setText(self.plug.ip)
+        r_lan_ip.addWidget(self.in_plug_ip, stretch=2)
+
+        self.btn_save_ip = PushButton(tr("btn_save_plug_params"), self.plug_body_widget)
+        self.btn_save_ip.clicked.connect(self._on_save_ip_clicked)
+        r_lan_ip.addWidget(self.btn_save_ip)
+        pb_layout.addLayout(r_lan_ip)
+
         self._update_plug_status_ui()
 
         # QR Code Display Container (initially hidden)
@@ -459,19 +473,47 @@ class SettingsView(QWidget):
             self.lbl_plug_status_info.setStyleSheet("color: #ffb74d; font-weight: bold;")
             self.btn_test_toggle.setEnabled(False)
             self.lbl_plug_device_name.setText("—")
+            return
+
+        dev_name = self.plug.device_name or "Smart Plug"
+        self.btn_test_toggle.setEnabled(True)
+        self.lbl_plug_device_name.setText(dev_name)
+
+        # Check if local LAN is configured with a valid private IP
+        is_private_ip = False
+        if self.plug.ip:
+            try:
+                import ipaddress
+                is_private_ip = ipaddress.ip_address(self.plug.ip).is_private
+            except Exception:
+                is_private_ip = False
+
+        if is_private_ip:
+            self.lbl_plug_status_icon.setText("⚡")
+            self.lbl_plug_status_info.setText(f"Локальный режим LAN ({self.plug.ip}) — без облака и QR-кодов")
+            self.lbl_plug_status_info.setStyleSheet("color: #4caf50; font-weight: bold;")
         elif getattr(self.plug, "_session_expired", False):
             self.lbl_plug_status_icon.setText("⚠️")
             self.lbl_plug_status_info.setText(tr("status_plug_expired"))
             self.lbl_plug_status_info.setStyleSheet("color: #ff5252; font-weight: bold;")
-            self.btn_test_toggle.setEnabled(True)
-            self.lbl_plug_device_name.setText(self.plug.device_name or "Smart Plug")
         else:
             self.lbl_plug_status_icon.setText("✅")
-            dev_name = self.plug.device_name or "Smart Plug"
             self.lbl_plug_status_info.setText(tr("status_plug_linked", dev_name))
             self.lbl_plug_status_info.setStyleSheet("color: #4caf50; font-weight: bold;")
-            self.btn_test_toggle.setEnabled(True)
-            self.lbl_plug_device_name.setText(dev_name)
+
+    def _on_save_ip_clicked(self):
+        val = self.in_plug_ip.text().strip()
+        if self.plug:
+            self.plug.ip = val
+            from core.database import set_setting
+            set_setting("plug_ip", val)
+            self._update_plug_status_ui()
+            InfoBar.success(
+                tr("sec_smart_plug"),
+                tr("msg_plug_saved"),
+                parent=self,
+                duration=2500
+            )
 
     def _on_plug_status_changed(self, is_on: bool):
         self._update_plug_status_ui()
