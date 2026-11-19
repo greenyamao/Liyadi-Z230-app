@@ -113,7 +113,7 @@ class MainWindow(MSFluentWindow):
         else:
             if self.plug:
                 self.plug.cancel_cooldown()
-                if self.plug.enabled and self.plug.auto_power_on:
+                if self.plug.enabled and self.plug.auto_power_on and not self.plug.is_on():
                     self.plug.turn_on()
             self.ble.set_cct(True, brightness, kelvin)
             self.ble.wake_and_connect()
@@ -151,7 +151,7 @@ class MainWindow(MSFluentWindow):
         else:
             if self.plug:
                 self.plug.cancel_cooldown()
-                if self.plug.enabled and self.plug.auto_power_on:
+                if self.plug.enabled and self.plug.auto_power_on and not self.plug.is_on():
                     self.plug.turn_on()
             self.ble.set_brightness(val)
             self.ble.wake_and_connect()
@@ -180,7 +180,7 @@ class MainWindow(MSFluentWindow):
             target_b = self.ble.brightness if self.ble.brightness > 0 else 30
             if self.plug:
                 self.plug.cancel_cooldown()
-                if self.plug.enabled and self.plug.auto_power_on:
+                if self.plug.enabled and self.plug.auto_power_on and not self.plug.is_on():
                     self.plug.turn_on()
             self.ble.set_cct(True, target_b, self.ble.kelvin)
             self.ble.wake_and_connect()

@@ -178,9 +178,9 @@ class SettingsView(QWidget):
         r_status.addStretch()
 
         self.btn_plug_on = PushButton(tr("btn_plug_on"), self.plug_body_widget)
-        self.btn_plug_on.clicked.connect(lambda: self.plug.turn_on() if self.plug else None)
+        self.btn_plug_on.clicked.connect(lambda: self.plug.turn_on(force=True) if self.plug else None)
         self.btn_plug_off = PushButton(tr("btn_plug_off"), self.plug_body_widget)
-        self.btn_plug_off.clicked.connect(lambda: self.plug.turn_off() if self.plug else None)
+        self.btn_plug_off.clicked.connect(lambda: self.plug.turn_off(force=True) if self.plug else None)
         r_status.addWidget(self.btn_plug_on)
         r_status.addWidget(self.btn_plug_off)
         pb_layout.addLayout(r_status)

@@ -1,6 +1,7 @@
 import io
 import json
 import logging
+import queue
 import threading
 import time
 from typing import Any, Dict, List, Optional
@@ -49,6 +50,12 @@ class SmartPlugManager(QObject):
         self._session = get_setting("tuya_session", None)
         self._manager: Optional[Manager] = None
         self._is_on = True
+        self._target_power: Optional[bool] = None
+
+        # Serialized power command queue to eliminate thread races
+        self._cmd_queue = queue.Queue()
+        self._worker_thread = threading.Thread(target=self._queue_worker, daemon=True)
+        self._worker_thread.start()
 
         # Cooldown timer
         self._cooldown_timer = QTimer(self)
@@ -210,23 +217,51 @@ class SmartPlugManager(QObject):
 
     # --- Power Control (Dual-Mode: Local LAN + Cloud API Fallback) ---
 
-    def turn_on(self) -> bool:
-        self.cancel_cooldown()
-        return self.set_power(True)
+    def is_on(self) -> bool:
+        if self._target_power is not None:
+            return self._target_power
+        return bool(self._is_on)
 
-    def turn_off(self) -> bool:
-        return self.set_power(False)
+    def turn_on(self, force: bool = False) -> bool:
+        self.cancel_cooldown()
+        if not force and self.is_on():
+            return True
+        return self.set_power(True, force=force)
+
+    def turn_off(self, force: bool = False) -> bool:
+        if not force and not self.is_on():
+            return True
+        return self.set_power(False, force=force)
 
     def toggle(self) -> bool:
-        return self.set_power(not self._is_on)
+        return self.set_power(not self.is_on(), force=True)
 
-    def set_power(self, is_on: bool) -> bool:
-        """Attempts local LAN execution first (tinytuya), falls back to Tuya Cloud."""
+    def set_power(self, is_on: bool, force: bool = False) -> bool:
+        """Queues a power state change request for serial execution."""
         if not self.enabled:
             return False
 
-        threading.Thread(target=self._execute_power_command, args=(is_on,), daemon=True).start()
+        if not force and self._target_power == is_on:
+            return True
+
+        self._target_power = is_on
+        self._cmd_queue.put(is_on)
         return True
+
+    def _queue_worker(self):
+        while True:
+            try:
+                target_state = self._cmd_queue.get()
+                # Coalesce / drain queue so only the latest requested state executes
+                while not self._cmd_queue.empty():
+                    try:
+                        target_state = self._cmd_queue.get_nowait()
+                    except queue.Empty:
+                        break
+
+                self._execute_power_command(target_state)
+            except Exception as e:
+                logger.error(f"Error in plug worker queue: {e}")
 
     def _execute_power_command(self, is_on: bool):
         success = False
