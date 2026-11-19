@@ -68,7 +68,7 @@ class SchedulerEngine(QObject):
                     self.runtime_state[r_id] = state
                     if self.plug_manager:
                         self.plug_manager.cancel_cooldown()
-                        if self.plug_manager.enabled and self.plug_manager.auto_power_on and not self.plug_manager.is_on():
+                        if self.plug_manager.enabled and self.plug_manager.auto_power_on:
                             self.plug_manager.turn_on()
                     self.ble_manager.wake_and_connect()
                     target_b = max(0, min(100, rule.get("target_brightness", 50)))
@@ -85,7 +85,7 @@ class SchedulerEngine(QObject):
                     
                     if self.plug_manager:
                         self.plug_manager.cancel_cooldown()
-                        if self.plug_manager.enabled and self.plug_manager.auto_power_on and not self.plug_manager.is_on():
+                        if self.plug_manager.enabled and self.plug_manager.auto_power_on:
                             self.plug_manager.turn_on()
                     self.ble_manager.wake_and_connect()
 

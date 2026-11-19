@@ -1,7 +1,6 @@
 import io
 import json
 import logging
-import queue
 import threading
 import time
 from typing import Any, Dict, List, Optional
@@ -50,12 +49,6 @@ class SmartPlugManager(QObject):
         self._session = get_setting("tuya_session", None)
         self._manager: Optional[Manager] = None
         self._is_on = True
-        self._target_power: Optional[bool] = None
-
-        # Serialized power command queue to eliminate thread races
-        self._cmd_queue = queue.Queue()
-        self._worker_thread = threading.Thread(target=self._queue_worker, daemon=True)
-        self._worker_thread.start()
 
         # Cooldown timer
         self._cooldown_timer = QTimer(self)
@@ -218,52 +211,34 @@ class SmartPlugManager(QObject):
     # --- Power Control (Dual-Mode: Local LAN + Cloud API Fallback) ---
 
     def is_on(self) -> bool:
-        if self._target_power is not None:
-            return self._target_power
         return bool(self._is_on)
 
-    def turn_on(self, force: bool = False) -> bool:
+    def turn_on(self) -> bool:
         self.cancel_cooldown()
-        if not force and self.is_on():
-            return True
-        return self.set_power(True, force=force)
+        return self.set_power(True)
 
-    def turn_off(self, force: bool = False) -> bool:
-        if not force and not self.is_on():
-            return True
-        return self.set_power(False, force=force)
+    def turn_off(self) -> bool:
+        return self.set_power(False)
 
     def toggle(self) -> bool:
-        return self.set_power(not self.is_on(), force=True)
+        return self.set_power(not self._is_on)
 
-    def set_power(self, is_on: bool, force: bool = False) -> bool:
-        """Queues a power state change request for serial execution."""
+    def set_power(self, is_on: bool) -> bool:
+        """Attempts local LAN execution first (tinytuya), falls back to Tuya Cloud."""
         if not self.enabled:
             return False
 
-        if not force and self._target_power == is_on:
-            return True
-
-        self._target_power = is_on
-        self._cmd_queue.put(is_on)
+        threading.Thread(target=self._execute_power_command, args=(is_on,), daemon=True).start()
         return True
 
-    def _queue_worker(self):
-        while True:
-            try:
-                target_state = self._cmd_queue.get()
-                # Coalesce / drain queue so only the latest requested state executes
-                while not self._cmd_queue.empty():
-                    try:
-                        target_state = self._cmd_queue.get_nowait()
-                    except queue.Empty:
-                        break
-
-                self._execute_power_command(target_state)
-            except Exception as e:
-                logger.error(f"Error in plug worker queue: {e}")
-
     def _execute_power_command(self, is_on: bool):
+        # Wait up to 2 seconds if _manager is still initializing on startup
+        if not self._manager and self._session:
+            for _ in range(20):
+                if self._manager:
+                    break
+                time.sleep(0.1)
+
         success = False
 
         # 1. Try local LAN via tinytuya ONLY if IP is a private LAN address (e.g. 192.168.x.x)

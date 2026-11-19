@@ -28,6 +28,7 @@ class MainWindow(MSFluentWindow):
         self.scheduler = scheduler
         self.plug = plug
         self.start_minimized = start_minimized
+        self._last_slider_brightness = self.ble.brightness if self.ble.is_on else 0
 
         self.setWindowTitle(tr("app_title"))
         self.setWindowIcon(create_tray_icon_pixmap())
@@ -106,14 +107,18 @@ class MainWindow(MSFluentWindow):
         self.tray.exit_requested.connect(self._quit_application)
 
     def _apply_cct_with_plug(self, power: bool, brightness: int, kelvin: int):
+        prev_val = getattr(self, "_last_slider_brightness", 0)
+        target_b = brightness if power else 0
+        self._last_slider_brightness = target_b
+
         if not power or brightness <= 0:
             self.ble.set_cct(False, 0, kelvin)
-            if self.plug and self.plug.enabled and self.plug.auto_power_off:
+            if prev_val > 0 and self.plug and self.plug.enabled and self.plug.auto_power_off:
                 self.plug.start_cooldown()
         else:
-            if self.plug:
+            if prev_val <= 0 and self.plug:
                 self.plug.cancel_cooldown()
-                if self.plug.enabled and self.plug.auto_power_on and not self.plug.is_on():
+                if self.plug.enabled and self.plug.auto_power_on:
                     self.plug.turn_on()
             self.ble.set_cct(True, brightness, kelvin)
             self.ble.wake_and_connect()
@@ -144,15 +149,20 @@ class MainWindow(MSFluentWindow):
         self.tray.retranslate_ui()
 
     def _on_brightness_changed(self, val: int):
+        prev_val = getattr(self, "_last_slider_brightness", 0)
+        self._last_slider_brightness = val
+
         if val <= 0:
             self.ble.set_brightness(0)
-            if self.plug and self.plug.enabled and self.plug.auto_power_off:
-                self.plug.start_cooldown()
+            if prev_val > 0:
+                if self.plug and self.plug.enabled and self.plug.auto_power_off:
+                    self.plug.start_cooldown()
         else:
-            if self.plug:
-                self.plug.cancel_cooldown()
-                if self.plug.enabled and self.plug.auto_power_on and not self.plug.is_on():
-                    self.plug.turn_on()
+            if prev_val <= 0:
+                if self.plug:
+                    self.plug.cancel_cooldown()
+                    if self.plug.enabled and self.plug.auto_power_on:
+                        self.plug.turn_on()
             self.ble.set_brightness(val)
             self.ble.wake_and_connect()
 
@@ -169,6 +179,7 @@ class MainWindow(MSFluentWindow):
     def _on_hardware_state_updated(self, is_on: bool, brightness: int, kelvin: int):
         clamped_k = min(6500, max(2700, kelvin))
         self.light_view.update_hardware_state(is_on, brightness, clamped_k)
+        self._last_slider_brightness = brightness if is_on else 0
         self.config["last_power"] = is_on
         self.config["last_brightness"] = brightness
         self.config["last_kelvin"] = clamped_k
@@ -178,13 +189,15 @@ class MainWindow(MSFluentWindow):
         new_power = not self.ble.is_on
         if new_power:
             target_b = self.ble.brightness if self.ble.brightness > 0 else 30
+            self._last_slider_brightness = target_b
             if self.plug:
                 self.plug.cancel_cooldown()
-                if self.plug.enabled and self.plug.auto_power_on and not self.plug.is_on():
+                if self.plug.enabled and self.plug.auto_power_on:
                     self.plug.turn_on()
             self.ble.set_cct(True, target_b, self.ble.kelvin)
             self.ble.wake_and_connect()
         else:
+            self._last_slider_brightness = 0
             self.ble.set_cct(False, 0, self.ble.kelvin)
             if self.plug and self.plug.enabled and self.plug.auto_power_off:
                 self.plug.start_cooldown()
