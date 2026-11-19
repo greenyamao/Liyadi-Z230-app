@@ -30,6 +30,7 @@ class SmartPlugManager(QObject):
     qr_ready = Signal(bytes)               # PNG image bytes of QR code
     auth_success = Signal(str)             # device_name
     auth_failed = Signal(str)              # error message
+    command_failed = Signal(str)           # error executing power command
     cooldown_tick = Signal(int)            # remaining seconds
     cooldown_finished = Signal()           # cooldown ended, power turned off
     cooldown_cancelled = Signal()
@@ -49,6 +50,7 @@ class SmartPlugManager(QObject):
         self._session = get_setting("tuya_session", None)
         self._manager: Optional[Manager] = None
         self._is_on = True
+        self._session_expired = False
 
         # Cooldown timer
         self._cooldown_timer = QTimer(self)
@@ -98,6 +100,10 @@ class SmartPlugManager(QObject):
                     self.device_updated.emit(self.device_name, self.device_id, self.ip)
         except Exception as e:
             logger.error(f"Error initializing Tuya manager: {e}")
+            err_str = str(e).lower()
+            if any(k in err_str for k in ("1010", "-9999999", "token", "sign")):
+                self._session_expired = True
+                self.command_failed.emit("Сессия Smart Life истекла. Пожалуйста, отсканируйте QR-код заново.")
 
     def _on_token_refreshed(self, token_info: dict):
         if self._session:
@@ -259,24 +265,35 @@ class SmartPlugManager(QObject):
                 logger.debug(f"Local LAN command skipped or failed: {e}")
 
         # 2. Fast Cloud API via tuya_sharing (runs in ~350ms)
+        last_error = None
         if not success and self._manager and self.device_id:
             try:
                 # Try standard Tuya socket DPS code "switch_1"
                 self._manager.send_commands(self.device_id, [{"code": "switch_1", "value": is_on}])
                 success = True
                 logger.info(f"Cloud API command successful (switch_1): is_on={is_on}")
-            except Exception:
+            except Exception as e1:
+                last_error = e1
                 try:
                     # Fallback to "switch"
                     self._manager.send_commands(self.device_id, [{"code": "switch", "value": is_on}])
                     success = True
                     logger.info(f"Cloud API command successful (switch): is_on={is_on}")
                 except Exception as e2:
+                    last_error = e2
                     logger.error(f"Cloud API command failed: {e2}")
 
         if success:
             self._is_on = is_on
+            self._session_expired = False
             self.status_changed.emit(is_on)
+        else:
+            err_str = str(last_error or "")
+            if any(k in err_str.lower() for k in ("1010", "-9999999", "token", "sign")):
+                self._session_expired = True
+                self.command_failed.emit("Сессия Smart Life истекла. Пожалуйста, отсканируйте QR-код в настройках заново.")
+            else:
+                self.command_failed.emit(f"Ошибка розетки: {err_str or 'Команда не выполнена'}")
 
     # --- Cooldown Automation ---
 

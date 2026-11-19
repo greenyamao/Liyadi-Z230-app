@@ -376,6 +376,8 @@ class SettingsView(QWidget):
         self.plug.qr_ready.connect(self._on_qr_ready)
         self.plug.auth_success.connect(self._on_auth_success)
         self.plug.auth_failed.connect(self._on_auth_failed)
+        self.plug.status_changed.connect(self._on_plug_status_changed)
+        self.plug.command_failed.connect(self._on_plug_command_failed)
         self.plug.device_updated.connect(lambda name, dev_id, ip: self.lbl_plug_device_name.setText(name))
 
     def _on_plug_enable_toggled(self, checked):
@@ -457,6 +459,12 @@ class SettingsView(QWidget):
             self.lbl_plug_status_info.setStyleSheet("color: #ffb74d; font-weight: bold;")
             self.btn_test_toggle.setEnabled(False)
             self.lbl_plug_device_name.setText("—")
+        elif getattr(self.plug, "_session_expired", False):
+            self.lbl_plug_status_icon.setText("⚠️")
+            self.lbl_plug_status_info.setText(tr("status_plug_expired"))
+            self.lbl_plug_status_info.setStyleSheet("color: #ff5252; font-weight: bold;")
+            self.btn_test_toggle.setEnabled(True)
+            self.lbl_plug_device_name.setText(self.plug.device_name or "Smart Plug")
         else:
             self.lbl_plug_status_icon.setText("✅")
             dev_name = self.plug.device_name or "Smart Plug"
@@ -464,6 +472,25 @@ class SettingsView(QWidget):
             self.lbl_plug_status_info.setStyleSheet("color: #4caf50; font-weight: bold;")
             self.btn_test_toggle.setEnabled(True)
             self.lbl_plug_device_name.setText(dev_name)
+
+    def _on_plug_status_changed(self, is_on: bool):
+        self._update_plug_status_ui()
+        status_text = tr("val_on") if is_on else tr("val_off")
+        InfoBar.success(
+            tr("sec_smart_plug"),
+            f"{tr('lbl_plug_status')} {status_text}",
+            parent=self,
+            duration=2500
+        )
+
+    def _on_plug_command_failed(self, err_msg: str):
+        self._update_plug_status_ui()
+        InfoBar.error(
+            tr("sec_smart_plug"),
+            err_msg,
+            parent=self,
+            duration=5000
+        )
 
     def _on_user_code_changed(self, text):
         from core.database import set_setting
@@ -484,8 +511,6 @@ class SettingsView(QWidget):
     def _on_test_toggle_clicked(self):
         if self.plug:
             self.plug.toggle()
-            status_text = tr("val_on") if self.plug._is_on else tr("val_off")
-            InfoBar.info(tr("sec_smart_plug"), f"{tr('lbl_plug_status')} {status_text}", parent=self, duration=2000)
 
     def _populate_language_combo(self):
         self.lang_combo.blockSignals(True)
